@@ -6,7 +6,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Get all countries
 exports.getAllCountries = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM countries ORDER BY name');
+    const [rows] = await db.query('SELECT * FROM Countries ORDER BY name');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch countries', details: err.message });
@@ -15,17 +15,21 @@ exports.getAllCountries = async (req, res) => {
 
 // Get all regions (optionally by country_id)
 exports.getAllRegions = async (req, res) => {
+  console.log('getAllRegions called');
   try {
-    let query = 'SELECT * FROM regions';
+    let query = 'SELECT * FROM Regions';
     const params = [];
     if (req.query.country_id) {
       query += ' WHERE country_id = ?';
       params.push(req.query.country_id);
     }
     query += ' ORDER BY name';
+    console.log('Executing query:', query, 'with params:', params);
     const [rows] = await db.query(query, params);
+    console.log('Regions query result:', rows);
     res.json(rows);
   } catch (err) {
+    console.error('Error in getAllRegions:', err);
     res.status(500).json({ error: 'Failed to fetch regions', details: err.message });
   }
 };
@@ -33,7 +37,7 @@ exports.getAllRegions = async (req, res) => {
 // Get all routes
 exports.getAllRoutes = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM routes ORDER BY name');
+    const [rows] = await db.query('SELECT * FROM Routes ORDER BY name');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch routes', details: err.message });
@@ -453,7 +457,7 @@ exports.addCountry = async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Country name is required' });
   try {
-    const [result] = await db.query('INSERT INTO countries (name) VALUES (?)', [name]);
+    const [result] = await db.query('INSERT INTO Countries (name) VALUES (?)', [name]);
     res.status(201).json({ id: result.insertId, name });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add country', details: err.message });
@@ -465,7 +469,7 @@ exports.addRegion = async (req, res) => {
   const { name, country_id } = req.body;
   if (!name || !country_id) return res.status(400).json({ error: 'Region name and country_id are required' });
   try {
-    const [result] = await db.query('INSERT INTO regions (name, country_id) VALUES (?, ?)', [name, country_id]);
+    const [result] = await db.query('INSERT INTO Regions (name, country_id) VALUES (?, ?)', [name, country_id]);
     res.status(201).json({ id: result.insertId, name, country_id });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add region', details: err.message });
@@ -477,7 +481,7 @@ exports.addRoute = async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Route name is required' });
   try {
-    const [result] = await db.query('INSERT INTO routes (name) VALUES (?)', [name]);
+    const [result] = await db.query('INSERT INTO Routes (name) VALUES (?)', [name]);
     res.status(201).json({ id: result.insertId, name });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add route', details: err.message });

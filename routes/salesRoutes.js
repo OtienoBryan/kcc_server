@@ -3,9 +3,20 @@ const router = express.Router();
 const salesController = require('../controllers/salesController');
 
 // Dropdown endpoints
-router.get('/countries', salesController.getAllCountries);
-router.get('/regions', salesController.getAllRegions);
-router.get('/routes', salesController.getAllRoutes);
+router.get('/countries', (req, res, next) => {
+  console.log('Sales routes: /countries hit');
+  next();
+}, salesController.getAllCountries);
+
+router.get('/regions', (req, res, next) => {
+  console.log('Sales routes: /regions hit');
+  next();
+}, salesController.getAllRegions);
+
+router.get('/routes', (req, res, next) => {
+  console.log('Sales routes: /routes hit');
+  next();
+}, salesController.getAllRoutes);
 
 // Add endpoints for adding country, region, and route
 router.post('/countries', salesController.addCountry);

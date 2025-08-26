@@ -7,4 +7,7 @@ const myVisibilityReportController = require('../controllers/myVisibilityReportC
 // Simple test route
 router.get('/', myVisibilityReportController.getAllMyVisibilityReports);
 
+// Test database route
+router.get('/test', myVisibilityReportController.testDatabase);
+
 module.exports = router; 

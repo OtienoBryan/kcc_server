@@ -196,7 +196,7 @@ app.post('/api/auth/login', async (req, res) => {
         role: user.role 
       },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '24h' }
+      { expiresIn: '168h' }
     );
 
     console.log('Login successful for staff:', username);
@@ -494,7 +494,7 @@ app.get('/api/visibility-reports', async (req, res) => {
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
-      LEFT JOIN Country co ON c.countryId = co.id
+      LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON vr.userId = u.id
     `;
     
@@ -502,7 +502,7 @@ app.get('/api/visibility-reports', async (req, res) => {
       SELECT COUNT(*) as total
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
-      LEFT JOIN Country co ON c.countryId = co.id
+      LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON vr.userId = u.id
     `;
     
@@ -604,7 +604,7 @@ app.get('/api/visibility-reports/export', async (req, res) => {
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
-      LEFT JOIN Country co ON c.countryId = co.id
+      LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON vr.userId = u.id
     `;
     
@@ -755,7 +755,7 @@ app.get('/api/countries', async (req, res) => {
     const sql = `
       SELECT DISTINCT co.id, co.name
       FROM countries co
-      INNER JOIN clients c ON c.country_id = co.id
+      INNER JOIN Clients c ON c.country_id = co.id
       INNER JOIN VisibilityReport vr ON vr.clientId = c.id
       ORDER BY co.name ASC
     `;
@@ -810,7 +810,7 @@ app.get('/api/feedback-reports', async (req, res) => {
       SELECT fr.id, fr.reportId, fr.comment, fr.createdAt,
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM FeedbackReport fr
-      LEFT JOIN clients c ON fr.clientId = c.id
+      LEFT JOIN Clients c ON fr.clientId = c.id
       LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
     `;
@@ -818,7 +818,7 @@ app.get('/api/feedback-reports', async (req, res) => {
     let countSql = `
       SELECT COUNT(*) as total
       FROM FeedbackReport fr
-      LEFT JOIN clients c ON fr.clientId = c.id
+      LEFT JOIN Clients c ON fr.clientId = c.id
       LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
     `;
@@ -920,7 +920,7 @@ app.get('/api/feedback-reports/export', async (req, res) => {
       SELECT fr.id, fr.reportId, fr.comment, fr.createdAt,
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM FeedbackReport fr
-      LEFT JOIN clients c ON fr.clientId = c.id
+      LEFT JOIN Clients c ON fr.clientId = c.id
       LEFT JOIN countries co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
     `;
@@ -1070,7 +1070,7 @@ app.get('/api/feedback-countries', async (req, res) => {
     
     const sql = `
       SELECT DISTINCT co.id, co.name
-      FROM Country co
+      FROM countries co
       INNER JOIN Clients c ON c.country_id = co.id
       INNER JOIN FeedbackReport fr ON fr.clientId = c.id
       ORDER BY co.name ASC
@@ -1115,8 +1115,8 @@ app.get('/api/availability-reports/export', async (req, res) => {
       SELECT pr.id, pr.reportId, pr.productName, pr.quantity, pr.comment, pr.createdAt,
              c.name AS clientName, co.name AS countryName, u.name AS salesRepName
       FROM ProductReport pr
-      LEFT JOIN clients c ON pr.clientId = c.id
-      LEFT JOIN countries co ON c.country_id = co.id
+      LEFT JOIN Clients c ON pr.clientId = c.id
+      LEFT JOIN Country co ON c.country_id = co.id
       LEFT JOIN SalesRep u ON pr.userId = u.id
     `;
     
@@ -1282,7 +1282,7 @@ app.get('/api/availability-countries', async (req, res) => {
     const sql = `
       SELECT DISTINCT co.name
       FROM countries co
-      INNER JOIN clients c ON c.country_id = co.id
+      INNER JOIN Clients c ON c.country_id = co.id
       INNER JOIN ProductReport pr ON pr.clientId = c.id
       ORDER BY co.name ASC
     `;

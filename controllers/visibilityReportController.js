@@ -10,11 +10,11 @@ exports.getAllVisibilityReports = async (req, res) => {
       SELECT 
         vr.*,
         c.name as outlet,
-        c.country_id,
+        c.countryId,
         co.name as country
       FROM VisibilityReport vr
-      LEFT JOIN clients c ON vr.clientId = c.id
-      LEFT JOIN countries co ON c.country_id = co.id
+      LEFT JOIN Clients c ON vr.clientId = c.id
+      LEFT JOIN Country co ON c.countryId = co.id
       ORDER BY vr.createdAt DESC
     `;
     const [results] = await db.query(sql);
