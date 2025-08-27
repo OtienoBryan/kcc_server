@@ -1,70 +1,36 @@
--- Create SalesRep table (if it doesn't exist)
-CREATE TABLE IF NOT EXISTS SalesRep (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255),
-    phone VARCHAR(50),
-    country VARCHAR(100),
-    region VARCHAR(100),
-    route_id_update INT,
-    route_name_update VARCHAR(255),
-    photoUrl VARCHAR(500),
-    status ENUM('active', 'inactive') DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+-- Insert sample countries
+INSERT INTO countries (id, name) VALUES
+(1, 'Kenya'),
+(2, 'Tanzania')
+ON DUPLICATE KEY UPDATE name = name;
 
--- Create managers table
-CREATE TABLE IF NOT EXISTS managers (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255),
-    phoneNumber VARCHAR(50),
-    country VARCHAR(100),
-    region VARCHAR(100),
-    managerTypeId INT NOT NULL DEFAULT 1, -- 1: Retail, 2: Key Accounts, 3: Distributors
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+-- Insert sample regions for Kenya (country_id = 1) and Tanzania (country_id = 2)
+INSERT INTO regions (name, country_id) VALUES
+('Nairobi', 1),
+('Mombasa', 1),
+('Kisumu', 1),
+('Nakuru', 1),
+('Eldoret', 1),
+('Dar es Salaam', 2),
+('Arusha', 2),
+('Mwanza', 2),
+('Dodoma', 2),
+('Tanga', 2)
+ON DUPLICATE KEY UPDATE name = name;
 
--- Create distributors_targets table
-CREATE TABLE IF NOT EXISTS distributors_targets (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    sales_rep_id INT NOT NULL,
-    vapes_targets INT DEFAULT 0,
-    pouches_targets INT DEFAULT 0,
-    start_date DATE,
-    end_date DATE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sales_rep_id) REFERENCES SalesRep(id) ON DELETE CASCADE
-);
-
--- Create key_account_targets table
-CREATE TABLE IF NOT EXISTS key_account_targets (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    sales_rep_id INT NOT NULL,
-    vapes_targets INT DEFAULT 0,
-    pouches_targets INT DEFAULT 0,
-    start_date DATE,
-    end_date DATE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sales_rep_id) REFERENCES SalesRep(id) ON DELETE CASCADE
-);
-
--- Create retail_targets table
-CREATE TABLE IF NOT EXISTS retail_targets (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    sales_rep_id INT NOT NULL,
-    vapes_targets INT DEFAULT 0,
-    pouches_targets INT DEFAULT 0,
-    start_date DATE,
-    end_date DATE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (sales_rep_id) REFERENCES SalesRep(id) ON DELETE CASCADE
-);
+-- Insert sample routes
+INSERT INTO routes (name) VALUES
+('Nairobi Central'),
+('Mombasa Coast'),
+('Dar Central'),
+('Arusha North'),
+('Kisumu West'),
+('Nakuru East'),
+('Eldoret North'),
+('Mwanza Central'),
+('Dodoma Central'),
+('Tanga Coast')
+ON DUPLICATE KEY UPDATE name = name;
 
 -- Insert sample sales reps (if table is empty)
 INSERT INTO SalesRep (name, email, phone, country, region, route_id_update, route_name_update) VALUES

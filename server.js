@@ -475,7 +475,7 @@ app.use('/api', receiptRoutes);
 app.use('/api/my-assets', myAssetsRoutes);
 app.use('/api/faulty-products', faultyProductsRoutes);
 app.use('/api/stores', storeRoutes);
-app.use('/api', clientRoutes);
+// app.use('/api', clientRoutes); // This was causing route conflicts
 app.use('/api/sales-rep-leaves', salesRepLeaveRoutes);
 app.use('/api/calendar-tasks', calendarTaskRoutes);
 app.use('/api/users', userRoutes);
@@ -752,28 +752,54 @@ app.get('/api/countries', async (req, res) => {
   try {
     console.log('Countries route hit!');
     
+    // Simple query to get all countries without complex joins
     const sql = `
-      SELECT DISTINCT co.id, co.name
-      FROM countries co
-      INNER JOIN Clients c ON c.country_id = co.id
-      INNER JOIN VisibilityReport vr ON vr.clientId = c.id
-      ORDER BY co.name ASC
+      SELECT id, name
+      FROM Country
+      ORDER BY name ASC
     `;
     
     const [results] = await db.query(sql);
-    res.json({ success: true, data: results });
+    console.log(`Found ${results.length} countries`);
+    res.json(results);
   } catch (err) {
     console.error('Error fetching countries:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.get('/api/regions', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT name FROM Regions ORDER BY name');
-    res.json({ success: true, data: rows });
+    const { countryId } = req.query;
+    let sql = 'SELECT id, name FROM Regions';
+    let params = [];
+    
+    if (countryId) {
+      sql += ' WHERE countryId = ?';
+      params.push(countryId);
+    }
+    
+    sql += ' ORDER BY name';
+    
+    const [rows] = await db.query(sql, params);
+    console.log(`Found ${rows.length} regions for countryId: ${countryId || 'all'}`);
+    res.json(rows);
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Error fetching regions:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/routes', async (req, res) => {
+  try {
+    console.log('Routes endpoint hit!');
+    const sql = 'SELECT id, name FROM routes ORDER BY name';
+    const [rows] = await db.query(sql);
+    console.log(`Found ${rows.length} routes`);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching routes:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -782,18 +808,19 @@ app.get('/api/sales-reps', async (req, res) => {
   try {
     console.log('Sales reps route hit!');
     
+    // Simple query to get all sales reps without complex joins
     const sql = `
-      SELECT DISTINCT u.id, u.name
-      FROM SalesRep u
-      INNER JOIN VisibilityReport vr ON vr.userId = u.id
-      ORDER BY u.name ASC
+      SELECT id, name, email, phone, country, region, route_name_update, photoUrl, status, created_at, updated_at
+      FROM SalesRep
+      ORDER BY name ASC
     `;
     
     const [results] = await db.query(sql);
-    res.json({ success: true, data: results });
+    console.log(`Found ${results.length} sales reps`);
+    res.json(results);
   } catch (err) {
     console.error('Error fetching sales reps:', err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1070,7 +1097,7 @@ app.get('/api/feedback-countries', async (req, res) => {
     
     const sql = `
       SELECT DISTINCT co.id, co.name
-      FROM countries co
+      FROM Country co
       INNER JOIN Clients c ON c.country_id = co.id
       INNER JOIN FeedbackReport fr ON fr.clientId = c.id
       ORDER BY co.name ASC
@@ -1281,7 +1308,7 @@ app.get('/api/availability-countries', async (req, res) => {
     
     const sql = `
       SELECT DISTINCT co.name
-      FROM countries co
+      FROM Country co
       INNER JOIN Clients c ON c.country_id = co.id
       INNER JOIN ProductReport pr ON pr.clientId = c.id
       ORDER BY co.name ASC

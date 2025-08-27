@@ -46,55 +46,133 @@ exports.getAllRoutes = async (req, res) => {
 
 // Get all sales reps
 exports.getAllSalesReps = async (req, res) => {
+  console.log('=== GET ALL SALES REPS CALLED ===');
+  console.log('Request query:', req.query);
+  console.log('Request headers:', req.headers);
+  
   try {
+    console.log('Executing SQL query: SELECT * FROM SalesRep ORDER BY name');
     const [rows] = await db.query('SELECT * FROM SalesRep ORDER BY name');
+    console.log(`Found ${rows.length} sales reps`);
+    console.log('Sample sales rep (first one):', rows[0] || 'No sales reps found');
+    
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch sales reps', details: err.message });
+    console.error('=== ERROR FETCHING SALES REPS ===');
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
+    console.error('Full error object:', err);
+    
+    res.status(500).json({ 
+      error: 'Failed to fetch sales reps', 
+      details: err.message,
+      code: err.code,
+      sqlState: err.sqlState
+    });
   }
 };
 
 // Create a new sales rep
 exports.createSalesRep = async (req, res) => {
-  const { name, email, phoneNumber, country, region, route, photo } = req.body;
-  try {
-    const [result] = await db.query(
-      'INSERT INTO SalesRep (name, email, phone, country, region, route_name_update, photoUrl) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, phoneNumber, country, region, route, photo]
-    );
-    res.status(201).json({ 
-      id: result.insertId, 
-      name, 
-      email, 
-      phoneNumber, 
-      country, 
-      region, 
-      route, 
-      photo 
+  console.log('=== CREATE SALES REP CALLED ===');
+  console.log('Request body:', req.body);
+  console.log('Request headers:', req.headers);
+  
+  const { name, email, phoneNumber, country, region, route_name_update, photoUrl, status } = req.body;
+  
+  console.log('Extracted data:', {
+    name,
+    email,
+    phoneNumber,
+    country,
+    region,
+    route_name_update,
+    photoUrl,
+    status
+  });
+  
+  // Validate required fields
+  if (!name || !email) {
+    console.log('Validation failed: Missing required fields');
+    return res.status(400).json({ 
+      error: 'Missing required fields', 
+      required: ['name', 'email'],
+      received: { name, email, phoneNumber, country, region, route_name_update, photoUrl, status }
     });
+  }
+  
+  try {
+    console.log('Attempting database insertion...');
+    console.log('SQL Query: INSERT INTO SalesRep (name, email, phoneNumber, country, region, route_name_update, photoUrl, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    console.log('SQL Parameters:', [name, email, phoneNumber || null, country || null, region || null, route_name_update || null, photoUrl || null, status || 'active']);
+    
+    const [result] = await db.query(
+      'INSERT INTO SalesRep (name, email, phoneNumber, country, region, route_name_update, photoUrl, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, phoneNumber || null, country || null, region || null, route_name_update || null, photoUrl || null, status || 'active']
+    );
+    
+    console.log('Database insertion successful!');
+    console.log('Insert result:', result);
+    console.log('New sales rep ID:', result.insertId);
+    
+    const newSalesRep = {
+      id: result.insertId,
+      name,
+      email,
+      phoneNumber: phoneNumber || null,
+      country: country || null,
+      region: region || null,
+      route_name_update: route_name_update || null,
+      photoUrl: photoUrl || null,
+      status: status || 'active'
+    };
+    
+    console.log('Returning new sales rep:', newSalesRep);
+    res.status(201).json(newSalesRep);
+    
   } catch (err) {
-    res.status(500).json({ error: 'Failed to create sales rep', details: err.message });
+    console.error('=== ERROR CREATING SALES REP ===');
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
+    console.error('Full error object:', err);
+    
+    res.status(500).json({ 
+      error: 'Failed to create sales rep', 
+      details: err.message,
+      code: err.code,
+      sqlState: err.sqlState
+    });
   }
 };
 
 // Update a sales rep
 exports.updateSalesRep = async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, country, region, route_name_update, photoUrl } = req.body;
+  const { name, email, phoneNumber, country, region, route_name_update, photoUrl } = req.body;
   console.log('Update Sales Rep called');
   console.log('Params id:', id);
   console.log('Body:', req.body);
   try {
-    console.log('SQL params:', [name, email, phone, country, region, route_name_update, photoUrl, id]);
+    console.log('SQL params:', [name, email, phoneNumber, country, region, route_name_update, photoUrl, id]);
     await db.query(
       'UPDATE SalesRep SET name = ?, email = ?, phoneNumber = ?, country = ?, region = ?, route_name_update = ?, photoUrl = ? WHERE id = ?',
-      [name, email, phone, country, region, route_name_update, photoUrl, id]
+      [name, email, phoneNumber, country, region, route_name_update, photoUrl, id]
     );
     res.json({ 
       id, 
       name, 
       email, 
-      phone, 
+      phoneNumber, 
       country, 
       region, 
       route_name_update, 
@@ -108,20 +186,56 @@ exports.updateSalesRep = async (req, res) => {
 
 // Update status of a sales rep
 exports.updateSalesRepStatus = async (req, res) => {
+  console.log('=== UPDATE SALES REP STATUS CALLED ===');
+  console.log('Request params:', req.params);
+  console.log('Request body:', req.body);
+  
   const { id } = req.params;
   const { status } = req.body;
+  
+  console.log('Extracted data:', { id, status, statusType: typeof status });
+  
   if (typeof status !== 'number') {
+    console.log('Validation failed: Status must be a number');
     return res.status(400).json({ error: 'Status must be a number (0 or 1)' });
   }
+  
   try {
+    console.log('Attempting to update status...');
+    console.log('SQL Query: UPDATE SalesRep SET status = ? WHERE id = ?');
+    console.log('SQL Parameters:', [status, id]);
+    
     await db.query('UPDATE SalesRep SET status = ? WHERE id = ?', [status, id]);
+    console.log('Status update successful');
+    
+    console.log('Fetching updated sales rep...');
     const [rows] = await db.query('SELECT * FROM SalesRep WHERE id = ?', [id]);
+    
     if (rows.length === 0) {
+      console.log('Sales rep not found after update');
       return res.status(404).json({ error: 'Sales rep not found' });
     }
+    
+    console.log('Updated sales rep:', rows[0]);
     res.json(rows[0]);
+    
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update sales rep status', details: err.message });
+    console.error('=== ERROR UPDATING SALES REP STATUS ===');
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
+    console.error('Full error object:', err);
+    
+    res.status(500).json({ 
+      error: 'Failed to update sales rep status', 
+      details: err.message,
+      code: err.code,
+      sqlState: err.sqlState
+    });
   }
 };
 

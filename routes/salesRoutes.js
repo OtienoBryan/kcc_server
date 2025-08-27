@@ -27,16 +27,35 @@ router.post('/routes', salesController.addRoute);
 router.post('/sales-reps/upload-photo', salesController.uploadSalesRepPhoto);
 
 // Get all sales reps
-router.get('/sales-reps', salesController.getAllSalesReps);
+router.get('/sales-reps', (req, res, next) => {
+  console.log('=== SALES REP GET ALL ROUTE HIT ===');
+  console.log('Route: GET /api/sales/sales-reps');
+  console.log('Request query:', req.query);
+  console.log('Request headers:', req.headers);
+  next();
+}, salesController.getAllSalesReps);
 
 // Create a new sales rep
-router.post('/sales-reps', salesController.createSalesRep);
+router.post('/sales-reps', (req, res, next) => {
+  console.log('=== SALES REP CREATE ROUTE HIT ===');
+  console.log('Route: POST /api/sales/sales-reps');
+  console.log('Request body:', req.body);
+  console.log('Request headers:', req.headers);
+  next();
+}, salesController.createSalesRep);
 
 // Update a sales rep
 router.put('/sales-reps/:id', salesController.updateSalesRep);
 
 // Update status of a sales rep
-router.patch('/sales-reps/:id/status', salesController.updateSalesRepStatus);
+router.patch('/sales-reps/:id/status', (req, res, next) => {
+  console.log('=== SALES REP STATUS UPDATE ROUTE HIT ===');
+  console.log('Route: PATCH /api/sales/sales-reps/:id/status');
+  console.log('Request params:', req.params);
+  console.log('Request body:', req.body);
+  console.log('Request headers:', req.headers);
+  next();
+}, salesController.updateSalesRepStatus);
 
 // Delete a sales rep
 router.delete('/sales-reps/:id', salesController.deleteSalesRep);
