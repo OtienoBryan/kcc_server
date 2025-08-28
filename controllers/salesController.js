@@ -605,7 +605,7 @@ exports.addCountry = async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'Country name is required' });
   try {
-    const [result] = await db.query('INSERT INTO Countries (name) VALUES (?)', [name]);
+    const [result] = await db.query('INSERT INTO Country (name) VALUES (?)', [name]);
     res.status(201).json({ id: result.insertId, name });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add country', details: err.message });

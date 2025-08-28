@@ -747,26 +747,7 @@ app.get('/api/visibility-reports/export', async (req, res) => {
   }
 });
 
-// Get available countries for filtering
-app.get('/api/countries', async (req, res) => {
-  try {
-    console.log('Countries route hit!');
-    
-    // Simple query to get all countries without complex joins
-    const sql = `
-      SELECT id, name
-      FROM Country
-      ORDER BY name ASC
-    `;
-    
-    const [results] = await db.query(sql);
-    console.log(`Found ${results.length} countries`);
-    res.json(results);
-  } catch (err) {
-    console.error('Error fetching countries:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 app.get('/api/regions', async (req, res) => {
   try {
@@ -838,7 +819,7 @@ app.get('/api/feedback-reports', async (req, res) => {
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM FeedbackReport fr
       LEFT JOIN Clients c ON fr.clientId = c.id
-      LEFT JOIN countries co ON c.country_id = co.id
+      LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
     `;
     
