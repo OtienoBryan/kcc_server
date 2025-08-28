@@ -494,7 +494,7 @@ app.get('/api/visibility-reports', async (req, res) => {
              c.name AS outlet, co.name AS country, u.name AS salesRep
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
-      LEFT JOIN countries co ON c.country_id = co.id
+      LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON vr.userId = u.id
     `;
     
@@ -502,7 +502,7 @@ app.get('/api/visibility-reports', async (req, res) => {
       SELECT COUNT(*) as total
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
-      LEFT JOIN countries co ON c.country_id = co.id
+      LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON vr.userId = u.id
     `;
     
