@@ -82,6 +82,208 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'API is working on Vercel!', timestamp: new Date().toISOString() });
 });
 
+// Database test endpoint
+app.get('/api/test-db', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+    
+    // Check what tables exist
+    const [tables] = await db.query('SHOW TABLES');
+    console.log('Available tables:', tables);
+    
+    // Try to query countries table
+    let countriesResult = null;
+    try {
+      const [countries] = await db.query('SELECT * FROM countries LIMIT 5');
+      countriesResult = { success: true, count: countries.length, sample: countries[0] };
+    } catch (countriesErr) {
+      countriesResult = { success: false, error: countriesErr.message };
+    }
+    
+    // Try to query SalesRep table
+    let salesRepResult = null;
+    try {
+      const [salesReps] = await db.query('SELECT * FROM SalesRep LIMIT 5');
+      salesRepResult = { success: true, count: salesReps.length, sample: salesReps[0] };
+    } catch (salesRepErr) {
+      salesRepResult = { success: false, error: salesRepErr.message };
+    }
+    
+    res.json({
+      message: 'Database test completed',
+      timestamp: new Date().toISOString(),
+      availableTables: tables,
+      countriesTest: countriesResult,
+      salesRepTest: salesRepResult
+    });
+  } catch (error) {
+    console.error('Database test error:', error);
+    res.status(500).json({ 
+      error: 'Database test failed', 
+      message: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Fallback countries endpoint that tries multiple table names
+app.get('/api/countries-fallback', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+    
+    let countries = null;
+    let tableName = null;
+    
+    // Try different possible table names
+    const possibleTableNames = ['countries', 'Countries', 'Country', 'country'];
+    
+    for (const table of possibleTableNames) {
+      try {
+        console.log(`Trying to query table: ${table}`);
+        const [rows] = await db.query(`SELECT * FROM ${table} ORDER BY name`);
+        if (rows && rows.length > 0) {
+          countries = rows;
+          tableName = table;
+          console.log(`Successfully queried table: ${table}, found ${rows.length} countries`);
+          break;
+        }
+      } catch (err) {
+        console.log(`Failed to query table: ${table}, error: ${err.message}`);
+        continue;
+      }
+    }
+    
+    if (countries) {
+      res.json({
+        success: true,
+        tableName: tableName,
+        data: countries,
+        count: countries.length
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Countries table not found',
+        triedTables: possibleTableNames
+      });
+    }
+  } catch (error) {
+    console.error('Countries fallback endpoint error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch countries', 
+      message: error.message
+    });
+  }
+});
+
+// Fallback regions endpoint that tries multiple table names
+app.get('/api/regions-fallback', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+    
+    let regions = null;
+    let tableName = null;
+    
+    // Try different possible table names
+    const possibleTableNames = ['regions', 'Regions', 'Region', 'region'];
+    
+    for (const table of possibleTableNames) {
+      try {
+        console.log(`Trying to query table: ${table}`);
+        const [rows] = await db.query(`SELECT * FROM ${table} ORDER BY name`);
+        if (rows && rows.length > 0) {
+          regions = rows;
+          tableName = table;
+          console.log(`Successfully queried table: ${table}, found ${rows.length} regions`);
+          break;
+        }
+      } catch (err) {
+        console.log(`Failed to query table: ${table}, error: ${err.message}`);
+        continue;
+      }
+    }
+    
+    if (regions) {
+      res.json({
+        success: true,
+        tableName: tableName,
+        data: regions,
+        count: regions.length
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Regions table not found',
+        triedTables: possibleTableNames
+      });
+    }
+  } catch (error) {
+    console.error('Regions fallback endpoint error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch regions', 
+      message: error.message
+    });
+  }
+});
+
+// Fallback routes endpoint that tries multiple table names
+app.get('/api/routes-fallback', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+    
+    let routes = null;
+    let tableName = null;
+    
+    // Try different possible table names
+    const possibleTableNames = ['routes', 'Routes', 'Route', 'route'];
+    
+    for (const table of possibleTableNames) {
+      try {
+        console.log(`Trying to query table: ${table}`);
+        const [rows] = await db.query(`SELECT * FROM ${table} ORDER BY name`);
+        if (rows && rows.length > 0) {
+          routes = rows;
+          tableName = table;
+          console.log(`Successfully queried table: ${table}, found ${rows.length} routes`);
+          break;
+        }
+      } catch (err) {
+        console.log(`Failed to query table: ${table}, error: ${err.message}`);
+        continue;
+      }
+    }
+    
+    if (routes) {
+      res.json({
+        success: true,
+        tableName: tableName,
+        data: routes,
+        count: routes.length
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Routes table not found',
+        triedTables: possibleTableNames
+      });
+    }
+  } catch (error) {
+    console.error('Routes fallback endpoint error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch routes', 
+      message: error.message
+    });
+  }
+});
+
 // Simple auth test endpoint
 app.post('/api/auth/test', (req, res) => {
   res.json({ message: 'Auth test endpoint working!', timestamp: new Date().toISOString() });

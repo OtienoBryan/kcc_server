@@ -6,9 +6,19 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Get all countries
 exports.getAllCountries = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Countries ORDER BY name');
+    console.log('getAllCountries called - attempting to query countries table');
+    const [rows] = await db.query('SELECT * FROM Country ORDER BY name');
+    console.log(`Found ${rows.length} countries`);
     res.json(rows);
   } catch (err) {
+    console.error('Error in getAllCountries:', err);
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
     res.status(500).json({ error: 'Failed to fetch countries', details: err.message });
   }
 };
@@ -37,9 +47,19 @@ exports.getAllRegions = async (req, res) => {
 // Get all routes
 exports.getAllRoutes = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM Routes ORDER BY name');
+    console.log('getAllRoutes called - attempting to query routes table');
+    const [rows] = await db.query('SELECT * FROM routes ORDER BY name');
+    console.log(`Found ${rows.length} routes`);
     res.json(rows);
   } catch (err) {
+    console.error('Error in getAllRoutes:', err);
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage
+    });
     res.status(500).json({ error: 'Failed to fetch routes', details: err.message });
   }
 };
@@ -67,6 +87,20 @@ exports.getAllSalesReps = async (req, res) => {
       sqlMessage: err.sqlMessage
     });
     console.error('Full error object:', err);
+    
+    // Try to check if the table exists
+    try {
+      const [tables] = await db.query('SHOW TABLES LIKE "SalesRep"');
+      console.log('Tables matching SalesRep:', tables);
+      
+      if (tables.length === 0) {
+        console.log('SalesRep table does not exist, checking for alternative names...');
+        const [allTables] = await db.query('SHOW TABLES');
+        console.log('All available tables:', allTables);
+      }
+    } catch (tableCheckErr) {
+      console.error('Error checking table existence:', tableCheckErr);
+    }
     
     res.status(500).json({ 
       error: 'Failed to fetch sales reps', 
