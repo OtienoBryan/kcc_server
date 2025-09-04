@@ -10,11 +10,11 @@ router.get('/', async (req, res) => {
     let params = [];
     
     if (date) {
-      // Filter by checkinTime for the specific date
+      // Filter by checkInTime for the specific date
       query = `
         SELECT * FROM JourneyPlan 
-        WHERE DATE(checkinTime) = ? 
-        AND checkinTime IS NOT NULL
+        WHERE DATE(checkInTime) = ? 
+        AND checkInTime IS NOT NULL
       `;
       params = [date];
     }

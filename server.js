@@ -457,6 +457,10 @@ app.post('/api/journey-plans', journeyPlanController.createJourneyPlan);
 app.patch('/api/journey-plans/:id', journeyPlanController.updateJourneyPlan);
 app.delete('/api/journey-plans/:id', journeyPlanController.deleteJourneyPlan);
 
+// Clients Visited routes
+const clientsVisitedRoutes = require('./routes/clientsVisitedRoutes');
+app.use('/api/clients-visited', clientsVisitedRoutes);
+
 
 
 // Financial System Routes
@@ -746,8 +750,6 @@ app.get('/api/visibility-reports/export', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-
 
 app.get('/api/regions', async (req, res) => {
   try {
@@ -1401,6 +1403,80 @@ io.on('connection', (socket) => {
       console.error('Socket sendMessage error:', err);
     }
   });
+});
+
+// Product Expiry Report endpoint
+app.get('/api/product-expiry-report', async (req, res) => {
+  try {
+    console.log('Product expiry report endpoint hit!');
+    
+    const { daysAhead = 30, clientId, userId, productId } = req.query;
+    const days = parseInt(daysAhead, 10);
+    
+    let whereClauses = [];
+    let params = [];
+    
+    // Add date filter for products expiring within specified days
+    whereClauses.push('expiryDate <= DATE_ADD(CURDATE(), INTERVAL ? DAY)');
+    params.push(days);
+    
+    // Add optional filters
+    if (clientId) {
+      whereClauses.push('clientId = ?');
+      params.push(clientId);
+    }
+    
+    if (userId) {
+      whereClauses.push('userId = ?');
+      params.push(userId);
+    }
+    
+    if (productId) {
+      whereClauses.push('productId = ?');
+      params.push(productId);
+    }
+    
+    const whereClause = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    
+    const sql = `
+      SELECT 
+        per.*,
+        c.name as client_name,
+        u.full_name as user_name,
+        sr.name as sales_rep_name,
+        sr.email as sales_rep_email,
+        sr.phoneNumber as sales_rep_phone,
+        sr.country as sales_rep_country,
+        sr.region as sales_rep_region,
+        sr.route as sales_rep_route,
+        p.product_name as product_name,
+        p.product_code as sku,
+        DATEDIFF(per.expiryDate, CURDATE()) as days_until_expiry
+      FROM ProductExpiryReport per
+      LEFT JOIN Clients c ON per.clientId = c.id
+      LEFT JOIN users u ON per.userId = u.id
+      LEFT JOIN SalesRep sr ON per.userId = sr.id
+      LEFT JOIN products p ON per.productId = p.id
+      ${whereClause}
+      ORDER BY per.expiryDate ASC, per.productName ASC
+    `;
+    
+    const [rows] = await db.query(sql, params);
+    console.log(`Found ${rows.length} products expiring within ${days} days`);
+    
+    res.json({
+      success: true,
+      data: rows,
+      count: rows.length,
+      daysAhead: days
+    });
+  } catch (err) {
+    console.error('Error fetching product expiry report:', err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
 });
 
 const PORT = process.env.PORT || 5000;
