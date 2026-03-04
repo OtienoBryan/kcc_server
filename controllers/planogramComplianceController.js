@@ -339,3 +339,101 @@ exports.getPlanogramComplianceReport = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get outlet account summary with overall planogram compliance
+ */
+exports.getOutletAccountSummary = async (req, res) => {
+  try {
+    await ensureTableExists();
+    
+    const { startDate, endDate } = req.query;
+    
+    // Date filter for ProductReport
+    let productReportDateFilter = '';
+    let dateParams = [];
+    
+    if (startDate && endDate) {
+      productReportDateFilter = `AND DATE(pr.createdAt) BETWEEN ? AND ?`;
+      dateParams.push(startDate, endDate);
+    } else if (startDate) {
+      productReportDateFilter = `AND DATE(pr.createdAt) >= ?`;
+      dateParams.push(startDate);
+    } else if (endDate) {
+      productReportDateFilter = `AND DATE(pr.createdAt) <= ?`;
+      dateParams.push(endDate);
+    }
+    
+    // Query to get summary by outlet account
+    // First get target quantities per outlet (without ProductReport join to avoid duplication)
+    // Then join with actual quantities from ProductReport
+    const query = `
+      SELECT 
+        targets.outlet_account_id,
+        targets.outlet_account_name,
+        targets.total_products,
+        targets.total_target_quantity,
+        COALESCE(actuals.total_actual_quantity, 0) as total_actual_quantity,
+        COALESCE(actuals.total_report_count, 0) as total_report_count,
+        actuals.last_report_date
+      FROM (
+        SELECT 
+          pc.outlet_account_id,
+          oa.name as outlet_account_name,
+          COUNT(DISTINCT pc.product_id) as total_products,
+          SUM(pc.compliance_quantity) as total_target_quantity
+        FROM planogram_compliance pc
+        LEFT JOIN outlet_accounts oa ON pc.outlet_account_id = oa.id
+        WHERE oa.id IS NOT NULL
+        GROUP BY pc.outlet_account_id, oa.name
+      ) targets
+      LEFT JOIN (
+        SELECT 
+          pc.outlet_account_id,
+          SUM(pr.quantity) as total_actual_quantity,
+          COUNT(DISTINCT pr.id) as total_report_count,
+          MAX(pr.createdAt) as last_report_date
+        FROM planogram_compliance pc
+        LEFT JOIN Clients c ON c.outlet_account = pc.outlet_account_id
+        LEFT JOIN ProductReport pr ON pr.clientId = c.id 
+          AND pr.productId = pc.product_id
+          ${productReportDateFilter}
+        WHERE pr.id IS NOT NULL
+        GROUP BY pc.outlet_account_id
+      ) actuals ON targets.outlet_account_id = actuals.outlet_account_id
+      ORDER BY targets.outlet_account_name ASC
+    `;
+    
+    const [results] = await db.query(query, dateParams);
+    
+    // Calculate overall compliance percentage for each outlet
+    const summary = results.map(row => {
+      const overallCompliance = row.total_target_quantity > 0
+        ? ((row.total_actual_quantity / row.total_target_quantity) * 100).toFixed(1)
+        : row.total_actual_quantity > 0 ? '100.0' : '0.0';
+      
+      return {
+        outlet_account_id: row.outlet_account_id,
+        outlet_account_name: row.outlet_account_name,
+        total_products: row.total_products,
+        total_target_quantity: row.total_target_quantity,
+        total_actual_quantity: row.total_actual_quantity,
+        overall_compliance: parseFloat(overallCompliance),
+        total_report_count: row.total_report_count,
+        last_report_date: row.last_report_date
+      };
+    });
+    
+    res.json({
+      success: true,
+      data: summary
+    });
+  } catch (err) {
+    console.error('Error fetching outlet account summary:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch outlet account summary',
+      details: err.message 
+    });
+  }
+};

@@ -12,6 +12,9 @@ router.get('/outlet-account/:outletAccountId', planogramComplianceController.get
 // Get planogram compliance report (comparing targets with ProductReport quantities)
 router.get('/report', planogramComplianceController.getPlanogramComplianceReport);
 
+// Get outlet account summary with overall planogram compliance
+router.get('/outlet-summary', planogramComplianceController.getOutletAccountSummary);
+
 // Create or update a planogram compliance record
 router.post('/', planogramComplianceController.setPlanogramCompliance);
 

@@ -505,3 +505,43 @@ exports.getCurrentMonthPieData = async (req, res) => {
   }
 };
 
+/**
+ * Get outlets visited per month (lazy loaded)
+ * Returns unique outlets visited per month from JourneyPlan where status = 1 or 2
+ */
+exports.getOutletsVisited = async (req, res) => {
+  try {
+    console.log('[getOutletsVisited] Starting...');
+    
+    const [results] = await db.query(`
+      SELECT 
+        DATE_FORMAT(jp.date, '%Y-%m') as month_key,
+        DATE_FORMAT(jp.date, '%b %Y') as month,
+        COUNT(DISTINCT jp.clientId) as unique_outlets
+      FROM JourneyPlan jp
+      WHERE jp.status IN (1, 2)
+        AND jp.date IS NOT NULL
+      GROUP BY DATE_FORMAT(jp.date, '%Y-%m'), DATE_FORMAT(jp.date, '%b %Y')
+      ORDER BY month_key DESC
+      LIMIT 12
+    `);
+
+    console.log('[getOutletsVisited] Outlets visited data calculated:', results.length, 'months');
+
+    res.json({
+      success: true,
+      data: results.map(r => ({
+        month: r.month,
+        outlets: Number(r.unique_outlets) || 0
+      })).reverse() // Reverse to show oldest to newest
+    });
+
+  } catch (err) {
+    console.error('[getOutletsVisited] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch outlets visited data',
+      message: err.message 
+    });
+  }
+};

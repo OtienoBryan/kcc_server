@@ -12,6 +12,7 @@ router.get('/sales-dashboard-data', dashboardController.getSalesDashboardData);
 // Lazy-loaded endpoints for charts
 router.get('/product-performance', dashboardController.getProductPerformance);
 router.get('/current-month-pie', dashboardController.getCurrentMonthPieData);
+router.get('/outlets-visited', dashboardController.getOutletsVisited);
 
 module.exports = router;
 
