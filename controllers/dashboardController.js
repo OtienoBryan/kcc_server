@@ -20,14 +20,16 @@ exports.getSalesDashboardData = async (req, res) => {
       ordersResult,
       leavesResult,
       managersResult,
-      targetsResult
+      targetsResult,
+      planogramComplianceResult,
+      checkedInRepsResult
     ] = await Promise.allSettled([
-      // 1. Get sales reps with route and region info
+      // 1. Get all sales reps with route and region info
       db.query(`
-        SELECT sr.id, sr.name, r.name as route_name, 
-               r.region as region_name, r.country
-        FROM SalesRep sr
-        LEFT JOIN routes r ON sr.route_id_update = r.id
+        SELECT sr.id, sr.name, sr.status, sr.route_id_update, r.name as route_name, 
+               r.region as region_name
+        FROM \`SalesRep\` sr
+        LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
         WHERE sr.status = 1
         ORDER BY sr.name
       `),
@@ -67,7 +69,40 @@ exports.getSalesDashboardData = async (req, res) => {
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM distributors_targets'),
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM key_account_targets'),
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM retail_targets')
-      ])
+      ]),
+
+      // 6. Get planogram compliance data aggregated by month
+      db.query(`
+        SELECT 
+          DATE_FORMAT(pr.createdAt, '%Y-%m') as month_key,
+          DATE_FORMAT(pr.createdAt, '%b %Y') as month,
+          COALESCE(SUM(pc.compliance_quantity), 0) as total_target,
+          COALESCE(SUM(pr.quantity), 0) as total_actual,
+          CASE 
+            WHEN COALESCE(SUM(pc.compliance_quantity), 0) > 0 
+            THEN ROUND((COALESCE(SUM(pr.quantity), 0) / SUM(pc.compliance_quantity)) * 100, 1)
+            ELSE 0 
+          END as compliance_percentage
+        FROM planogram_compliance pc
+        LEFT JOIN outlet_accounts oa ON pc.outlet_account_id = oa.id
+        LEFT JOIN Clients c ON c.outlet_account = pc.outlet_account_id
+        LEFT JOIN ProductReport pr ON pr.clientId = c.id AND pr.productId = pc.product_id
+        WHERE pr.createdAt IS NOT NULL
+        GROUP BY DATE_FORMAT(pr.createdAt, '%Y-%m'), DATE_FORMAT(pr.createdAt, '%b %Y')
+        HAVING total_target > 0
+        ORDER BY month_key DESC
+        LIMIT 12
+      `),
+
+      // 7. Get count of sales reps who have checked in today
+      db.query(`
+        SELECT COUNT(DISTINCT jp.userId) as checked_in_count
+        FROM \`JourneyPlan\` jp
+        INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
+        WHERE sr.status = 1
+          AND jp.checkInTime IS NOT NULL
+          AND DATE(jp.checkInTime) = CURDATE()
+      `)
     ]);
 
     // Initialize response data
@@ -76,6 +111,8 @@ exports.getSalesDashboardData = async (req, res) => {
         totalSales: 0,
         totalOrders: 0,
         activeReps: 0,
+        checkedInReps: 0,
+        totalActiveReps: 0,
         avgPerformance: 0
       },
       monthlyData: [],
@@ -83,15 +120,69 @@ exports.getSalesDashboardData = async (req, res) => {
       managers: [],
       pendingLeavesCount: 0,
       newOrdersCount: 0,
-      pieChartData: []
+      pieChartData: [],
+      planogramComplianceData: []
     };
 
     // Process sales reps
     let salesReps = [];
     if (salesRepsResult.status === 'fulfilled') {
-      salesReps = salesRepsResult.value[0];
-      dashboardData.stats.activeReps = salesReps.length;
-      console.log('[getSalesDashboardData] Sales reps found:', salesReps.length);
+      salesReps = salesRepsResult.value[0] || [];
+      
+      // Count ALL sales reps (not filtered by status) for the "all sales reps" display
+      dashboardData.stats.totalActiveReps = salesReps.length;
+      
+      console.log('[getSalesDashboardData] Sales reps query result structure:', {
+        hasValue: !!salesRepsResult.value,
+        valueType: typeof salesRepsResult.value,
+        isArray: Array.isArray(salesRepsResult.value),
+        valueLength: salesRepsResult.value ? salesRepsResult.value.length : 0,
+        firstElementType: salesRepsResult.value && salesRepsResult.value[0] ? typeof salesRepsResult.value[0] : 'N/A',
+        firstElementIsArray: salesRepsResult.value && salesRepsResult.value[0] ? Array.isArray(salesRepsResult.value[0]) : false
+      });
+      console.log('[getSalesDashboardData] Total sales reps fetched:', salesReps.length);
+      console.log('[getSalesDashboardData] Total sales reps (all):', dashboardData.stats.totalActiveReps);
+      
+      if (salesReps.length > 0) {
+        const statusCounts = {};
+        salesReps.forEach(rep => {
+          const status = String(rep.status || 'null');
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        });
+        console.log('[getSalesDashboardData] Status breakdown:', statusCounts);
+        console.log('[getSalesDashboardData] First rep sample:', {
+          id: salesReps[0].id,
+          name: salesReps[0].name,
+          status: salesReps[0].status,
+          statusType: typeof salesReps[0].status
+        });
+      } else {
+        console.warn('[getSalesDashboardData] No sales reps found in result. Raw value:', JSON.stringify(salesRepsResult.value));
+      }
+    } else {
+      console.error('[getSalesDashboardData] Sales reps query failed:', salesRepsResult.reason);
+      dashboardData.stats.totalActiveReps = 0;
+    }
+
+    // Process checked-in sales reps count
+    if (checkedInRepsResult.status === 'fulfilled') {
+      const checkedInData = checkedInRepsResult.value[0] || [];
+      dashboardData.stats.checkedInReps = checkedInData[0]?.checked_in_count || 0;
+      dashboardData.stats.activeReps = dashboardData.stats.checkedInReps; // Keep for backward compatibility
+      console.log('[getSalesDashboardData] Checked-in sales reps today:', dashboardData.stats.checkedInReps);
+    } else {
+      // Fallback if query fails
+      dashboardData.stats.checkedInReps = 0;
+      dashboardData.stats.activeReps = 0;
+      console.error('[getSalesDashboardData] Checked-in query failed:', checkedInRepsResult.reason);
+    }
+    
+    // Ensure we have valid numbers even if queries failed
+    if (!dashboardData.stats.totalActiveReps && dashboardData.stats.totalActiveReps !== 0) {
+      dashboardData.stats.totalActiveReps = 0;
+    }
+    if (!dashboardData.stats.checkedInReps && dashboardData.stats.checkedInReps !== 0) {
+      dashboardData.stats.checkedInReps = 0;
     }
 
     // Process targets
@@ -277,8 +368,26 @@ exports.getSalesDashboardData = async (req, res) => {
       console.log('[getSalesDashboardData] Managers found:', dashboardData.managers.length);
     }
 
+    // Process planogram compliance data
+    if (planogramComplianceResult.status === 'fulfilled') {
+      const complianceData = planogramComplianceResult.value[0] || [];
+      // Reverse to show oldest to newest
+      dashboardData.planogramComplianceData = complianceData.reverse().map(row => ({
+        month: row.month,
+        compliance: Number(row.compliance_percentage) || 0
+      }));
+      console.log('[getSalesDashboardData] Planogram compliance data loaded:', dashboardData.planogramComplianceData.length, 'months');
+    } else {
+      console.log('[getSalesDashboardData] Planogram compliance query failed:', planogramComplianceResult.reason);
+    }
+
     const endTime = Date.now();
     console.log(`[getSalesDashboardData] Completed in ${endTime - startTime}ms`);
+    console.log('[getSalesDashboardData] Final stats being sent:', {
+      totalActiveReps: dashboardData.stats.totalActiveReps,
+      checkedInReps: dashboardData.stats.checkedInReps,
+      activeReps: dashboardData.stats.activeReps
+    });
 
     res.json({
       success: true,

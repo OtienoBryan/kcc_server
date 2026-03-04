@@ -10,7 +10,8 @@ exports.getAllOutletAccounts = async (req, res) => {
     let sql = `
       SELECT 
         id, 
-        name
+        name,
+        planogram_compliance
       FROM outlet_accounts
     `;
     
@@ -127,7 +128,7 @@ exports.createOutletAccount = async (req, res) => {
 exports.updateOutletAccount = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, planogram_compliance } = req.body;
     
     const updates = [];
     const params = [];
@@ -135,6 +136,11 @@ exports.updateOutletAccount = async (req, res) => {
     if (name !== undefined) {
       updates.push('name = ?');
       params.push(name);
+    }
+    
+    if (planogram_compliance !== undefined) {
+      updates.push('planogram_compliance = ?');
+      params.push(planogram_compliance);
     }
     
     if (updates.length === 0) {

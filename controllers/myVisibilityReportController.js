@@ -14,6 +14,7 @@ exports.getAllMyVisibilityReports = async (req, res) => {
     const outlet = req.query.outlet || '';
     const country = req.query.country || '';
     const salesRep = req.query.salesRep || '';
+    const photoType = req.query.photoType || '';
     const startDate = req.query.startDate || '';
     const endDate = req.query.endDate || '';
 
@@ -39,6 +40,11 @@ exports.getAllMyVisibilityReports = async (req, res) => {
     if (salesRep) {
       whereConditions.push('sr.name = ? AND sr.status = 1');
       queryParams.push(salesRep);
+    }
+
+    if (photoType) {
+      whereConditions.push('vr.photoType = ?');
+      queryParams.push(photoType);
     }
 
     if (startDate && endDate) {
@@ -80,6 +86,7 @@ exports.getAllMyVisibilityReports = async (req, res) => {
         vr.createdAt,
         vr.clientId,
         vr.userId,
+        vr.photoType,
         c.name as outletName,
         c.name as companyName,
         co.name as country,
@@ -142,16 +149,25 @@ exports.getFilterOptions = async (req, res) => {
       ORDER BY sr.name
     `;
 
+    const photoTypesSql = `
+      SELECT DISTINCT vr.photoType as photoType
+      FROM VisibilityReport vr
+      WHERE vr.photoType IS NOT NULL AND vr.photoType != ''
+      ORDER BY vr.photoType
+    `;
+
     const [outlets] = await db.query(outletsSql);
     const [countries] = await db.query(countriesSql);
     const [salesReps] = await db.query(salesRepsSql);
+    const [photoTypes] = await db.query(photoTypesSql);
 
     res.json({
       success: true,
       data: {
         outlets: outlets.map(o => o.outlet),
         countries: countries.map(c => c.country),
-        salesReps: salesReps.map(s => s.salesRep)
+        salesReps: salesReps.map(s => s.salesRep),
+        photoTypes: photoTypes.map(p => p.photoType)
       }
     });
   } catch (err) {

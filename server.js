@@ -20,7 +20,7 @@ process.env.TZ = 'UTC';
 process.env.NODE_TZ = 'UTC';
 
 // Try to require database and other modules, but don't crash if they fail
-let db, staffController, roleController, multer, upload, uploadController, teamController, clientController, branchController, serviceChargeController, journeyPlanController, payrollRoutes, financialRoutes, staffRoutes, chatRoutes, clientRoutes, salesRoutes, managerRoutes, noticeRoutes, salesRepLeaveRoutes, calendarTaskRoutes, userRoutes, loginHistoryRoutes, journeyPlanRoutes, riderRoutes, myVisibilityReportRoutes, feedbackReportRoutes, availabilityReportRoutes, shortExpiryReportRoutes, competitorActivityReportRoutes, priceComplianceReportRoutes, leaveRequestRoutes, supplierRoutes, receiptRoutes, myAssetsRoutes, faultyProductsRoutes, storeRoutes, routesRoutes, upliftSaleRoutes, dashboardRoutes, customerOrdersRoutes, categoryRoutes, brandRoutes, outletAccountRoutes, brandSosTargetRoutes, assetPurchaseOrderRoutes, departmentExpenseRoutes, auditTrailRoutes, sosReportRoutes;
+let db, staffController, roleController, multer, upload, uploadController, teamController, clientController, branchController, serviceChargeController, journeyPlanController, payrollRoutes, financialRoutes, staffRoutes, chatRoutes, clientRoutes, salesRoutes, managerRoutes, noticeRoutes, salesRepLeaveRoutes, calendarTaskRoutes, userRoutes, loginHistoryRoutes, journeyPlanRoutes, riderRoutes, myVisibilityReportRoutes, feedbackReportRoutes, availabilityReportRoutes, shortExpiryReportRoutes, competitorActivityReportRoutes, priceComplianceReportRoutes, leaveRequestRoutes, supplierRoutes, receiptRoutes, myAssetsRoutes, faultyProductsRoutes, storeRoutes, routesRoutes, upliftSaleRoutes, dashboardRoutes, customerOrdersRoutes, categoryRoutes, brandRoutes, outletAccountRoutes, brandSosTargetRoutes, planogramComplianceRoutes, assetPurchaseOrderRoutes, departmentExpenseRoutes, auditTrailRoutes, sosReportRoutes;
 
 try {
   db = require('./database/db');
@@ -73,6 +73,7 @@ try {
   brandRoutes = require('./routes/brandRoutes');
   outletAccountRoutes = require('./routes/outletAccountRoutes');
   brandSosTargetRoutes = require('./routes/brandSosTargetRoutes');
+  planogramComplianceRoutes = require('./routes/planogramComplianceRoutes');
   assetPurchaseOrderRoutes = require('./routes/assetPurchaseOrderRoutes');
   departmentExpenseRoutes = require('./routes/departmentExpenseRoutes');
   auditTrailRoutes = require('./routes/auditTrailRoutes');
@@ -205,6 +206,10 @@ if (outletAccountRoutes) {
 if (brandSosTargetRoutes) {
   app.use('/api/brand-sos-targets', brandSosTargetRoutes);
   console.log('Brand SOS target routes registered successfully');
+}
+if (planogramComplianceRoutes) {
+  app.use('/api/planogram-compliance', planogramComplianceRoutes);
+  console.log('Planogram compliance routes registered successfully');
 }
 if (departmentExpenseRoutes) {
   app.use('/api/department-expenses', departmentExpenseRoutes);
