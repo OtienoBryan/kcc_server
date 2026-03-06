@@ -10,6 +10,7 @@ exports.getAllCompetitorActivityReports = async (req, res) => {
     let sql = `
       SELECT ca.id, ca.outlet, ca.outlet_id, ca.merchandiser, ca.competing_product, 
              ca.mechanism, ca.product_id, ca.zuri_product, ca.date, ca.reportId,
+             ca.competitor_company,
              c.name AS outletName,
              sr.name AS merchandiserName
       FROM competitior ca
@@ -135,6 +136,7 @@ exports.exportCompetitorActivityReportsCSV = async (req, res) => {
     let sql = `
       SELECT ca.id, ca.outlet, ca.outlet_id, ca.merchandiser, ca.competing_product, 
              ca.mechanism, ca.product_id, ca.zuri_product, ca.date, ca.reportId,
+             ca.competitor_company,
              c.name AS outletName,
              sr.name AS merchandiserName
       FROM competitior ca
@@ -203,19 +205,20 @@ exports.exportCompetitorActivityReportsCSV = async (req, res) => {
     
     const [results] = await db.query(sql, params);
     
-    // Convert to CSV
-    const headers = ['ID', 'Outlet', 'Merchandiser', 'Competing Product', 'Mechanism', 'Zuri Product', 'Date', 'Report ID'];
+    // Convert to CSV - matching table column order
+    const headers = ['Outlet', 'Merchandiser', 'Competitor Name', 'Competing Product', 'Mechanism', 'NKCC Product', 'Date', 'ID', 'Report ID'];
     const csvRows = [headers.join(',')];
     
     results.forEach(row => {
       const values = [
-        row.id || '',
         `"${(row.outletName || row.outlet || '').replace(/"/g, '""')}"`,
         `"${(row.merchandiserName || '').replace(/"/g, '""')}"`,
+        `"${(row.competitor_company || '').replace(/"/g, '""')}"`,
         `"${(row.competing_product || '').replace(/"/g, '""')}"`,
         `"${(row.mechanism || '').replace(/"/g, '""')}"`,
         `"${(row.zuri_product || '').replace(/"/g, '""')}"`,
         row.date || '',
+        row.id || '',
         row.reportId || ''
       ];
       csvRows.push(values.join(','));

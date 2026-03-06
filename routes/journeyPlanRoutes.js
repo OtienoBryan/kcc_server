@@ -12,6 +12,9 @@ router.get('/', journeyPlanController.getAllJourneyPlans);
 // Get route compliance summary
 router.get('/compliance', journeyPlanController.getRouteCompliance);
 
+// Get outlet coverage with weekly breakdown
+router.get('/outlet-coverage', journeyPlanController.getOutletCoverage);
+
 // Get journey plans by user ID
 router.get('/user/:userId', journeyPlanController.getJourneyPlansByUser);
 

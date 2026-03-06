@@ -13,6 +13,7 @@ router.get('/sales-dashboard-data', dashboardController.getSalesDashboardData);
 router.get('/product-performance', dashboardController.getProductPerformance);
 router.get('/current-month-pie', dashboardController.getCurrentMonthPieData);
 router.get('/outlets-visited', dashboardController.getOutletsVisited);
+router.get('/orders-summary', dashboardController.getOrdersSummary);
 
 module.exports = router;
 

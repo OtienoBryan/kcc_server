@@ -107,11 +107,11 @@ exports.getAllSalesReps = async (req, res) => {
 
 // Create a new sales rep
 exports.createSalesRep = async (req, res) => {
-  const { name, email, phoneNumber, country, region, route, photo, role } = req.body;
+  const { name, email, phoneNumber, country, region, route, photo, role, expected_weekly_coverage } = req.body;
   try {
     const [result] = await db.query(
-      'INSERT INTO SalesRep (name, email, phoneNumber, country, region, route_name_update, photoUrl, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email, phoneNumber, country, region, route, photo, role || 'sales rep']
+      'INSERT INTO SalesRep (name, email, phoneNumber, country, region, route_name_update, photoUrl, role, expected_weekly_coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, phoneNumber, country, region, route, photo, role || 'sales rep', expected_weekly_coverage || null]
     );
     res.status(201).json({ 
       id: result.insertId, 
@@ -122,7 +122,8 @@ exports.createSalesRep = async (req, res) => {
       region, 
       route, 
       photo,
-      role: role || 'sales rep'
+      role: role || 'sales rep',
+      expected_weekly_coverage: expected_weekly_coverage || null
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create sales rep', details: err.message });
@@ -132,15 +133,15 @@ exports.createSalesRep = async (req, res) => {
 // Update a sales rep
 exports.updateSalesRep = async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone, country, region, route_name_update, photoUrl, role } = req.body;
+  const { name, email, phone, country, region, route_name_update, photoUrl, role, expected_weekly_coverage } = req.body;
   console.log('Update Sales Rep called');
   console.log('Params id:', id);
   console.log('Body:', req.body);
   try {
-    console.log('SQL params:', [name, email, phone, country, region, route_name_update, photoUrl, role, id]);
+    console.log('SQL params:', [name, email, phone, country, region, route_name_update, photoUrl, role, expected_weekly_coverage, id]);
     await db.query(
-      'UPDATE SalesRep SET name = ?, email = ?, phoneNumber = ?, country = ?, region = ?, route_name_update = ?, photoUrl = ?, role = ? WHERE id = ?',
-      [name, email, phone, country, region, route_name_update, photoUrl, role || 'sales rep', id]
+      'UPDATE SalesRep SET name = ?, email = ?, phoneNumber = ?, country = ?, region = ?, route_name_update = ?, photoUrl = ?, role = ?, expected_weekly_coverage = ? WHERE id = ?',
+      [name, email, phone, country, region, route_name_update, photoUrl, role || 'sales rep', expected_weekly_coverage || null, id]
     );
     res.json({ 
       id, 
@@ -151,7 +152,8 @@ exports.updateSalesRep = async (req, res) => {
       region, 
       route_name_update, 
       photoUrl,
-      role: role || 'sales rep'
+      role: role || 'sales rep',
+      expected_weekly_coverage: expected_weekly_coverage || null
     });
   } catch (err) {
     console.error('Error updating sales rep:', err);

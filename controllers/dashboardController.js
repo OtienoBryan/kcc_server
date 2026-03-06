@@ -22,7 +22,8 @@ exports.getSalesDashboardData = async (req, res) => {
       managersResult,
       targetsResult,
       planogramComplianceResult,
-      checkedInRepsResult
+      checkedInRepsResult,
+      currentMonthOutletsVisitedResult
     ] = await Promise.allSettled([
       // 1. Get all sales reps with route and region info
       db.query(`
@@ -102,13 +103,23 @@ exports.getSalesDashboardData = async (req, res) => {
         WHERE sr.status = 1
           AND jp.checkInTime IS NOT NULL
           AND DATE(jp.checkInTime) = CURDATE()
-      `)
+      `),
+
+      // 8. Get unique outlets visited in the current month
+      db.query(`
+        SELECT COUNT(DISTINCT jp.clientId) as outlets_visited_count
+        FROM JourneyPlan jp
+        WHERE jp.status IN (1, 2)
+          AND jp.clientId IS NOT NULL
+          AND jp.date BETWEEN ? AND ?
+      `, [currentMonthStart, currentMonthEnd])
     ]);
 
     // Initialize response data
     const dashboardData = {
       stats: {
         totalSales: 0,
+        outletsVisitedThisMonth: 0,
         totalOrders: 0,
         activeReps: 0,
         checkedInReps: 0,
@@ -183,6 +194,13 @@ exports.getSalesDashboardData = async (req, res) => {
     }
     if (!dashboardData.stats.checkedInReps && dashboardData.stats.checkedInReps !== 0) {
       dashboardData.stats.checkedInReps = 0;
+    }
+    if (currentMonthOutletsVisitedResult.status === 'fulfilled') {
+      const currentMonthOutletsData = currentMonthOutletsVisitedResult.value[0] || [];
+      dashboardData.stats.outletsVisitedThisMonth = Number(currentMonthOutletsData[0]?.outlets_visited_count) || 0;
+    } else {
+      dashboardData.stats.outletsVisitedThisMonth = 0;
+      console.error('[getSalesDashboardData] Current month outlets visited query failed:', currentMonthOutletsVisitedResult.reason);
     }
 
     // Process targets
@@ -541,6 +559,47 @@ exports.getOutletsVisited = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch outlets visited data',
+      message: err.message 
+    });
+  }
+};
+
+/**
+ * Get orders summary per month (lazy loaded)
+ * Returns total quantity from sales_order_items grouped by month
+ */
+exports.getOrdersSummary = async (req, res) => {
+  try {
+    console.log('[getOrdersSummary] Starting...');
+    
+    const [results] = await db.query(`
+      SELECT 
+        DATE_FORMAT(so.order_date, '%Y-%m') as month_key,
+        DATE_FORMAT(so.order_date, '%b %Y') as month,
+        SUM(soi.quantity) as total_quantity
+      FROM sales_order_items soi
+      JOIN sales_orders so ON soi.sales_order_id = so.id
+      WHERE so.order_date IS NOT NULL
+      GROUP BY DATE_FORMAT(so.order_date, '%Y-%m'), DATE_FORMAT(so.order_date, '%b %Y')
+      ORDER BY month_key DESC
+      LIMIT 12
+    `);
+
+    console.log('[getOrdersSummary] Orders summary data calculated:', results.length, 'months');
+
+    res.json({
+      success: true,
+      data: results.map(r => ({
+        month: r.month,
+        quantity: Number(r.total_quantity) || 0
+      })).reverse() // Reverse to show oldest to newest
+    });
+
+  } catch (err) {
+    console.error('[getOrdersSummary] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch orders summary data',
       message: err.message 
     });
   }

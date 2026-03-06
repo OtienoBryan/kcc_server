@@ -405,6 +405,142 @@ const journeyPlanController = {
       console.error('Check-out error:', error);
       res.status(500).json({ success: false, message: 'Failed to check-out', error: error.message });
     }
+  },
+
+  // Get outlet coverage by sales rep with weekly breakdown
+  getOutletCoverage: async (req, res) => {
+    try {
+      const { month, year, country } = req.query;
+      
+      // Default to current month if not provided
+      const now = new Date();
+      const targetMonth = month ? parseInt(month) : now.getMonth() + 1;
+      const targetYear = year ? parseInt(year) : now.getFullYear();
+      
+      // Calculate first and last day of the month
+      const firstDay = new Date(targetYear, targetMonth - 1, 1);
+      const lastDay = new Date(targetYear, targetMonth, 0);
+      const startDate = firstDay.toISOString().split('T')[0];
+      const endDate = lastDay.toISOString().split('T')[0];
+      
+      // Calculate week boundaries (5 weeks)
+      const weeks = [];
+      let currentDate = new Date(firstDay);
+      for (let week = 1; week <= 5; week++) {
+        const weekStart = new Date(currentDate);
+        const weekEnd = new Date(currentDate);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        
+        // Don't go beyond the end of the month
+        if (weekEnd > lastDay) {
+          weekEnd.setTime(lastDay.getTime());
+        }
+        
+        weeks.push({
+          week: week,
+          start: weekStart.toISOString().split('T')[0],
+          end: weekEnd.toISOString().split('T')[0]
+        });
+        
+        currentDate.setDate(currentDate.getDate() + 7);
+        if (currentDate > lastDay) break;
+      }
+      
+      // Build country filter
+      let countryFilter = '';
+      const params = [];
+      if (country) {
+        countryFilter = 'AND sr.country = ?';
+        params.push(country);
+      }
+      
+      // Get all active sales reps with expected weekly coverage and region
+      const [salesReps] = await db.query(`
+        SELECT 
+          sr.id,
+          sr.name,
+          sr.expected_weekly_coverage,
+          sr.region,
+          COALESCE(r.name, sr.region) as region_name
+        FROM SalesRep sr
+        LEFT JOIN Regions r ON sr.region = r.id OR sr.region = r.name
+        WHERE sr.status = 1
+        ${countryFilter}
+        ORDER BY sr.name ASC
+      `, params);
+      
+      // Get journey plans for the month with unique outlets per week
+      const [journeyPlans] = await db.query(`
+        SELECT 
+          jp.userId,
+          jp.clientId,
+          DATE(jp.date) as visitDate,
+          jp.status,
+          jp.checkInTime
+        FROM JourneyPlan jp
+        INNER JOIN SalesRep sr ON jp.userId = sr.id
+        WHERE DATE(jp.date) BETWEEN ? AND ?
+          AND (jp.status IN (1, 2) OR jp.checkInTime IS NOT NULL)
+          ${countryFilter}
+      `, [startDate, endDate, ...params]);
+      
+      // Process data: group by sales rep and week
+      const coverageData = salesReps.map(rep => {
+        const repPlans = journeyPlans.filter(p => p.userId === rep.id);
+        const weeklyCoverage = weeks.map(week => {
+          // Get unique outlets visited in this week
+          const weekVisits = repPlans.filter(p => {
+            // Handle date format - could be date string or datetime
+            let visitDate = p.visitDate;
+            if (visitDate && visitDate.includes('T')) {
+              visitDate = visitDate.split('T')[0];
+            } else if (visitDate && visitDate.includes(' ')) {
+              visitDate = visitDate.split(' ')[0];
+            }
+            return visitDate >= week.start && visitDate <= week.end;
+          });
+          const uniqueOutlets = new Set(weekVisits.map(v => v.clientId));
+          return {
+            week: week.week,
+            coverage: uniqueOutlets.size
+          };
+        });
+        
+        const expected = rep.expected_weekly_coverage || null;
+        const calculatePercentage = (coverage) => {
+          if (expected === null || expected === 0) return null;
+          return Number(((coverage / expected) * 100).toFixed(1));
+        };
+        
+        return {
+          salesRepId: rep.id,
+          salesRepName: rep.name,
+          region: rep.region_name || rep.region || null,
+          expectedWeeklyCoverage: expected,
+          week1: weeklyCoverage.find(w => w.week === 1)?.coverage || 0,
+          week1Percentage: calculatePercentage(weeklyCoverage.find(w => w.week === 1)?.coverage || 0),
+          week2: weeklyCoverage.find(w => w.week === 2)?.coverage || 0,
+          week2Percentage: calculatePercentage(weeklyCoverage.find(w => w.week === 2)?.coverage || 0),
+          week3: weeklyCoverage.find(w => w.week === 3)?.coverage || 0,
+          week3Percentage: calculatePercentage(weeklyCoverage.find(w => w.week === 3)?.coverage || 0),
+          week4: weeklyCoverage.find(w => w.week === 4)?.coverage || 0,
+          week4Percentage: calculatePercentage(weeklyCoverage.find(w => w.week === 4)?.coverage || 0),
+          week5: weeklyCoverage.find(w => w.week === 5)?.coverage || 0,
+          week5Percentage: calculatePercentage(weeklyCoverage.find(w => w.week === 5)?.coverage || 0)
+        };
+      });
+      
+      res.json({ 
+        success: true, 
+        data: coverageData,
+        month: targetMonth,
+        year: targetYear,
+        weeks: weeks.map(w => ({ week: w.week, start: w.start, end: w.end }))
+      });
+    } catch (error) {
+      console.error('Get outlet coverage error:', error);
+      res.status(500).json({ success: false, message: 'Failed to fetch outlet coverage', error: error.message });
+    }
   }
 };
 
