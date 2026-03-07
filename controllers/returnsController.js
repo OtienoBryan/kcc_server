@@ -156,6 +156,7 @@ const returnsController = {
           ri.product_id,
           ri.product_name,
           ri.quantity,
+          COALESCE(ri.return_reason, ri.return_reason, '') as return_reason,
           p.product_code,
           p.unit_of_measure
         FROM return_items ri
@@ -163,6 +164,11 @@ const returnsController = {
         WHERE ri.sales_order_id = ?
         ORDER BY ri.id ASC
       `, [id]);
+      
+      console.log('Return items fetched:', items.length, 'items');
+      if (items.length > 0) {
+        console.log('Sample item:', JSON.stringify(items[0], null, 2));
+      }
       
       res.json({ success: true, data: items });
     } catch (error) {
