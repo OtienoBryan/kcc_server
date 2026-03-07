@@ -57,6 +57,7 @@ const receivablesController = require('../controllers/receivablesController');
 const reportsController = require('../controllers/reportsController');
 const salesOrderController = require('../controllers/salesOrderController');
 const creditNoteController = require('../controllers/creditNoteController');
+const returnsController = require('../controllers/returnsController');
 
 // Chart of Accounts Routes (Protected with authentication)
 router.get('/accounts', authenticateToken, chartOfAccountsController.getAllAccounts);
@@ -354,5 +355,10 @@ router.post('/credit-notes/receive-back', authenticateToken, creditNoteControlle
 router.get('/customers/:customerId/invoices-for-credit', authenticateToken, creditNoteController.getCustomerInvoices);
 router.get('/invoices/:invoiceId/items-with-credited', authenticateToken, creditNoteController.getInvoiceItemsWithCreditedQuantities);
 router.get('/customers/:customerId/credit-notes', authenticateToken, creditNoteController.getCustomerCreditNotes);
+
+// Returns Routes (Protected with authentication)
+router.get('/returns', authenticateToken, returnsController.getAllReturns);
+router.get('/returns/:id', authenticateToken, returnsController.getReturnById);
+router.get('/returns/:id/items', authenticateToken, returnsController.getReturnItems);
 
 module.exports = router; 
