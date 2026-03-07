@@ -111,7 +111,8 @@ exports.getSalesDashboardData = async (req, res) => {
         FROM JourneyPlan jp
         WHERE jp.status IN (1, 2)
           AND jp.clientId IS NOT NULL
-          AND jp.date BETWEEN ? AND ?
+          AND jp.checkInTime IS NOT NULL
+          AND DATE(jp.checkInTime) BETWEEN ? AND ?
       `, [currentMonthStart, currentMonthEnd])
     ]);
 
@@ -534,7 +535,7 @@ exports.getOutletsVisited = async (req, res) => {
     
     // Build filter conditions
     let joinClause = '';
-    let whereConditions = ['jp.status IN (1, 2)', 'jp.date IS NOT NULL'];
+    let whereConditions = ['jp.status IN (1, 2)', 'jp.clientId IS NOT NULL', 'jp.checkInTime IS NOT NULL'];
     let queryParams = [];
     
     // Filter by team leader if provided
@@ -557,13 +558,13 @@ exports.getOutletsVisited = async (req, res) => {
     
     const [results] = await db.query(`
       SELECT 
-        DATE_FORMAT(jp.date, '%Y-%m') as month_key,
-        DATE_FORMAT(jp.date, '%b %Y') as month,
+        DATE_FORMAT(jp.checkInTime, '%Y-%m') as month_key,
+        DATE_FORMAT(jp.checkInTime, '%b %Y') as month,
         COUNT(DISTINCT jp.clientId) as unique_outlets
       FROM JourneyPlan jp
       ${joinClause}
       ${whereClause}
-      GROUP BY DATE_FORMAT(jp.date, '%Y-%m'), DATE_FORMAT(jp.date, '%b %Y')
+      GROUP BY DATE_FORMAT(jp.checkInTime, '%Y-%m'), DATE_FORMAT(jp.checkInTime, '%b %Y')
       ORDER BY month_key DESC
       LIMIT 12
     `, queryParams);
@@ -859,21 +860,25 @@ exports.getCheckedInSalesReps = async (req, res) => {
   try {
     const { team_leader_id, region } = req.query;
     
-    if (!team_leader_id) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'team_leader_id is required' 
-      });
-    }
-    
+    // Build WHERE conditions
     let whereConditions = [
       'sr.status = 1',
-      'sr.leader_id = ?',
       'jp.checkInTime IS NOT NULL',
       'DATE(jp.checkInTime) = CURDATE()'
     ];
-    let queryParams = [team_leader_id];
+    let queryParams = [];
     
+    // Filter by team leader if provided (for team leader role)
+    if (team_leader_id) {
+      whereConditions.push('sr.leader_id = ?');
+      queryParams.push(team_leader_id);
+    } else if (req.user && req.user.role === 'leader') {
+      // Auto-filter by current user if they are a team leader
+      whereConditions.push('sr.leader_id = ?');
+      queryParams.push(req.user.id);
+    }
+    
+    // Filter by region if provided
     if (region) {
       whereConditions.push('sr.region = ?');
       queryParams.push(region);
@@ -886,13 +891,17 @@ exports.getCheckedInSalesReps = async (req, res) => {
         sr.email,
         r.name as route_name,
         sr.region as region_name,
-        jp.checkInTime
+        MAX(jp.checkInTime) as checkInTime,
+        MAX(jp.checkoutTime) as checkoutTime
       FROM \`JourneyPlan\` jp
       INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
       LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
       WHERE ${whereConditions.join(' AND ')}
-      ORDER BY jp.checkInTime DESC
+      GROUP BY sr.id, sr.name, sr.email, r.name, sr.region
+      ORDER BY checkInTime DESC
     `, queryParams);
+
+    console.log(`[getCheckedInSalesReps] Found ${results.length} checked-in sales reps`);
 
     res.json({
       success: true,
@@ -902,7 +911,8 @@ exports.getCheckedInSalesReps = async (req, res) => {
         email: r.email,
         route_name: r.route_name,
         region_name: r.region_name,
-        checkInTime: r.checkInTime
+        checkInTime: r.checkInTime,
+        checkoutTime: r.checkoutTime
       }))
     });
 
