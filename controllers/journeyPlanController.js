@@ -218,7 +218,8 @@ const journeyPlanController = {
         showUpdateLocation = true,
         routeId,
         latitude,
-        longitude
+        longitude,
+        location_locked
       } = req.body;
 
       if (!date || !time || !userId || !clientId) {
@@ -228,15 +229,29 @@ const journeyPlanController = {
         });
       }
 
+      // Fetch location_locked from Clients table if not provided
+      let finalLocationLocked = location_locked;
+      if (finalLocationLocked === undefined || finalLocationLocked === null) {
+        const [clientData] = await db.query(
+          'SELECT location_locked FROM Clients WHERE id = ?',
+          [clientId]
+        );
+        if (clientData.length > 0) {
+          finalLocationLocked = clientData[0].location_locked || 0;
+        } else {
+          finalLocationLocked = 0;
+        }
+      }
+
       // Combine date and time into datetime
       const dateTime = `${date} ${time}:00`;
 
       const [result] = await db.query(`
         INSERT INTO JourneyPlan (
           date, time, userId, clientId, status, notes, 
-          showUpdateLocation, routeId, latitude, longitude, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-      `, [dateTime, time, userId, clientId, status, notes, showUpdateLocation, routeId, latitude, longitude]);
+          showUpdateLocation, routeId, latitude, longitude, location_locked, createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      `, [dateTime, time, userId, clientId, status, notes, showUpdateLocation, routeId, latitude, longitude, finalLocationLocked ? 1 : 0]);
 
       // Fetch the created journey plan
       const [newPlan] = await db.query(`

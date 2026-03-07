@@ -18,6 +18,7 @@ router.delete('/:id', clientController.deleteClient);
 router.get('/:id/history', clientController.getClientHistory);
 router.get('/:id/payments', clientController.getClientPayments);
 router.get('/:id/invoices', clientController.getClientInvoices);
+router.patch('/:id/location-lock', clientController.toggleLocationLock);
 // Add other CRUD routes as needed
 
 module.exports = router; 

@@ -90,7 +90,7 @@ const clientController = {
       
       // Lightweight mode - only fetch minimal fields needed for journey plan modal (no JOINs)
       if (lightweight) {
-        const lightweightFields = `c.id, c.name, c.email, c.address, c.contact, c.latitude, c.longitude`;
+        const lightweightFields = `c.id, c.name, c.email, c.address, c.contact, c.latitude, c.longitude, c.location_locked`;
         if (getAllClients) {
           [clients] = await db.query(
             `SELECT ${lightweightFields}
@@ -285,7 +285,7 @@ const clientController = {
         region_id, route_id, route_name,
         contact, tax_pin, status,
         countryId, country_id, credit_limit, payment_terms,
-        client_type, outlet_account
+        client_type, outlet_account, latitude, longitude, location_locked
       } = req.body;
       
       // Handle both field name variations for compatibility
@@ -309,6 +309,18 @@ const clientController = {
       if (payment_terms !== undefined) { updates.push('payment_terms = ?'); values.push(payment_terms); }
       if (client_type !== undefined) { updates.push('client_type = ?'); values.push(client_type); }
       if (outlet_account !== undefined) { updates.push('outlet_account = ?'); values.push(outlet_account); }
+      
+      // Check if location is locked before allowing latitude/longitude updates
+      if (latitude !== undefined || longitude !== undefined) {
+        const [clientCheck] = await db.query('SELECT location_locked FROM Clients WHERE id = ?', [id]);
+        if (clientCheck.length > 0 && clientCheck[0].location_locked === 1) {
+          return res.status(403).json({ message: 'Location is locked. Unlock location to make changes.' });
+        }
+      }
+      
+      if (latitude !== undefined) { updates.push('latitude = ?'); values.push(latitude); }
+      if (longitude !== undefined) { updates.push('longitude = ?'); values.push(longitude); }
+      if (location_locked !== undefined) { updates.push('location_locked = ?'); values.push(location_locked ? 1 : 0); }
       
       if (updates.length === 0) {
         return res.status(400).json({ message: 'No fields to update' });
@@ -467,6 +479,42 @@ const clientController = {
     } catch (error) {
       console.error('[getClientInvoices] error:', error);
       res.status(500).json({ message: 'Failed to fetch client invoices', error: error.message });
+    }
+  },
+
+  // Toggle location lock
+  toggleLocationLock: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { locked } = req.body;
+      
+      console.log(`[toggleLocationLock] called for client ID: ${id}, locked: ${locked}`);
+      
+      // Check if client has coordinates before allowing lock
+      const [client] = await db.query('SELECT latitude, longitude FROM Clients WHERE id = ?', [id]);
+      
+      if (client.length === 0) {
+        return res.status(404).json({ message: 'Client not found' });
+      }
+      
+      // Only allow locking if coordinates exist
+      if (locked && (!client[0].latitude || !client[0].longitude || 
+          client[0].latitude === 0 || client[0].longitude === 0)) {
+        return res.status(400).json({ 
+          message: 'Cannot lock location: Client does not have valid coordinates. Please set latitude and longitude first.' 
+        });
+      }
+      
+      await db.query(
+        'UPDATE Clients SET location_locked = ? WHERE id = ?',
+        [locked ? 1 : 0, id]
+      );
+      
+      const [updatedClient] = await db.query('SELECT * FROM Clients WHERE id = ?', [id]);
+      res.json({ success: true, data: updatedClient[0] });
+    } catch (error) {
+      console.error('[toggleLocationLock] error:', error);
+      res.status(500).json({ message: 'Failed to toggle location lock', error: error.message });
     }
   },
 };
