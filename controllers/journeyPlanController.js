@@ -72,13 +72,13 @@ const journeyPlanController = {
       res.status(500).json({ success: false, message: 'Failed to fetch route compliance', error: error.message });
     }
   },
-  // Get all journey plans (with optional date, country filtering, and limit)
+  // Get all journey plans (with optional date, country, team_leader_id filtering, and limit)
   getAllJourneyPlans: async (req, res) => {
     try {
-      const { startDate, endDate, country, limit } = req.query;
+      const { startDate, endDate, country, limit, team_leader_id } = req.query;
       const limitValue = limit ? parseInt(limit, 10) : null;
 
-      // Build SQL query with JOIN to SalesRep for country filtering
+      // Build SQL query with JOIN to SalesRep for country and team leader filtering
       let sql = `
         SELECT 
           jp.id,
@@ -125,6 +125,12 @@ const journeyPlanController = {
       if (country) {
         where.push('sr.country = ?');
         params.push(country);
+      }
+      
+      // Team leader filtering - only show journey plans for sales reps assigned to this team leader
+      if (team_leader_id) {
+        where.push('sr.leader_id = ?');
+        params.push(team_leader_id);
       }
       
       if (where.length) {

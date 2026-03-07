@@ -530,6 +530,30 @@ exports.getCurrentMonthPieData = async (req, res) => {
 exports.getOutletsVisited = async (req, res) => {
   try {
     console.log('[getOutletsVisited] Starting...');
+    const { team_leader_id, region } = req.query;
+    
+    // Build filter conditions
+    let joinClause = '';
+    let whereConditions = ['jp.status IN (1, 2)', 'jp.date IS NOT NULL'];
+    let queryParams = [];
+    
+    // Filter by team leader if provided
+    if (team_leader_id) {
+      joinClause = 'INNER JOIN SalesRep sr ON jp.userId = sr.id';
+      whereConditions.push('sr.leader_id = ?');
+      queryParams.push(team_leader_id);
+    }
+    
+    // Filter by region if provided
+    if (region) {
+      if (!joinClause) {
+        joinClause = 'INNER JOIN SalesRep sr ON jp.userId = sr.id';
+      }
+      whereConditions.push('sr.region = ?');
+      queryParams.push(region);
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     
     const [results] = await db.query(`
       SELECT 
@@ -537,12 +561,12 @@ exports.getOutletsVisited = async (req, res) => {
         DATE_FORMAT(jp.date, '%b %Y') as month,
         COUNT(DISTINCT jp.clientId) as unique_outlets
       FROM JourneyPlan jp
-      WHERE jp.status IN (1, 2)
-        AND jp.date IS NOT NULL
+      ${joinClause}
+      ${whereClause}
       GROUP BY DATE_FORMAT(jp.date, '%Y-%m'), DATE_FORMAT(jp.date, '%b %Y')
       ORDER BY month_key DESC
       LIMIT 12
-    `);
+    `, queryParams);
 
     console.log('[getOutletsVisited] Outlets visited data calculated:', results.length, 'months');
 
@@ -571,6 +595,30 @@ exports.getOutletsVisited = async (req, res) => {
 exports.getOrdersSummary = async (req, res) => {
   try {
     console.log('[getOrdersSummary] Starting...');
+    const { team_leader_id, region } = req.query;
+    
+    // Build filter conditions
+    let joinClause = 'JOIN sales_orders so ON soi.sales_order_id = so.id';
+    let whereConditions = ['so.order_date IS NOT NULL'];
+    let queryParams = [];
+    
+    // Filter by team leader if provided
+    if (team_leader_id || region) {
+      joinClause += ' JOIN Clients c ON so.client_id = c.id';
+      joinClause += ' JOIN SalesRep sr ON c.route_id_update = sr.route_id_update';
+      
+      if (team_leader_id) {
+        whereConditions.push('sr.leader_id = ?');
+        queryParams.push(team_leader_id);
+      }
+      
+      if (region) {
+        whereConditions.push('sr.region = ?');
+        queryParams.push(region);
+      }
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
     
     const [results] = await db.query(`
       SELECT 
@@ -578,12 +626,12 @@ exports.getOrdersSummary = async (req, res) => {
         DATE_FORMAT(so.order_date, '%b %Y') as month,
         SUM(soi.quantity) as total_quantity
       FROM sales_order_items soi
-      JOIN sales_orders so ON soi.sales_order_id = so.id
-      WHERE so.order_date IS NOT NULL
+      ${joinClause}
+      ${whereClause}
       GROUP BY DATE_FORMAT(so.order_date, '%Y-%m'), DATE_FORMAT(so.order_date, '%b %Y')
       ORDER BY month_key DESC
       LIMIT 12
-    `);
+    `, queryParams);
 
     console.log('[getOrdersSummary] Orders summary data calculated:', results.length, 'months');
 
@@ -600,6 +648,269 @@ exports.getOrdersSummary = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch orders summary data',
+      message: err.message 
+    });
+  }
+};
+
+/**
+ * Get team leader dashboard data (filtered by team_leader_id and region)
+ */
+exports.getTeamLeaderDashboardData = async (req, res) => {
+  try {
+    const { team_leader_id, region } = req.query;
+    
+    if (!team_leader_id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'team_leader_id is required' 
+      });
+    }
+    
+    console.log('[getTeamLeaderDashboardData] Starting for team_leader_id:', team_leader_id, 'region:', region);
+    const startTime = Date.now();
+
+    // Get current month date range
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+    // Build filter conditions for sales reps
+    let salesRepWhereConditions = ['sr.status = 1', 'sr.leader_id = ?'];
+    let salesRepParams = [team_leader_id];
+    
+    if (region) {
+      salesRepWhereConditions.push('sr.region = ?');
+      salesRepParams.push(region);
+    }
+    
+    const salesRepWhereClause = `WHERE ${salesRepWhereConditions.join(' AND ')}`;
+
+    // Execute all queries in parallel
+    const [
+      salesRepsResult,
+      ordersResult,
+      leavesResult,
+      planogramComplianceResult,
+      checkedInRepsResult,
+      currentMonthOutletsVisitedResult
+    ] = await Promise.allSettled([
+      // 1. Get sales reps assigned to this team leader
+      db.query(`
+        SELECT sr.id, sr.name, sr.status, sr.route_id_update, r.name as route_name, 
+               r.region as region_name, sr.region
+        FROM \`SalesRep\` sr
+        LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
+        ${salesRepWhereClause}
+        ORDER BY sr.name
+      `, salesRepParams),
+
+      // 2. Get orders for sales reps assigned to this team leader
+      db.query(`
+        SELECT 
+          so.id,
+          so.order_date,
+          so.total_amount,
+          so.my_status,
+          so.client_id,
+          c.client_type,
+          c.route_id_update
+        FROM sales_orders so
+        LEFT JOIN Clients c ON so.client_id = c.id
+        LEFT JOIN SalesRep sr ON c.route_id_update = sr.route_id_update
+        WHERE so.order_date IS NOT NULL
+          AND sr.leader_id = ?
+          ${region ? 'AND sr.region = ?' : ''}
+        ORDER BY so.order_date DESC
+      `, region ? [team_leader_id, region] : [team_leader_id]),
+
+      // 3. Get pending leaves count for team members
+      db.query(`
+        SELECT COUNT(*) as pending_count
+        FROM leaves l
+        INNER JOIN SalesRep sr ON l.user_id = sr.id
+        WHERE (l.status = '0' OR l.status = 0)
+          AND sr.leader_id = ?
+          ${region ? 'AND sr.region = ?' : ''}
+      `, region ? [team_leader_id, region] : [team_leader_id]),
+
+      // 4. Get planogram compliance data
+      db.query(`
+        SELECT 
+          DATE_FORMAT(pr.createdAt, '%Y-%m') as month_key,
+          DATE_FORMAT(pr.createdAt, '%b %Y') as month,
+          COALESCE(SUM(pc.compliance_quantity), 0) as total_target,
+          COALESCE(SUM(pr.quantity), 0) as total_actual,
+          CASE 
+            WHEN COALESCE(SUM(pc.compliance_quantity), 0) > 0 
+            THEN ROUND((COALESCE(SUM(pr.quantity), 0) / SUM(pc.compliance_quantity)) * 100, 1)
+            ELSE 0 
+          END as compliance_percentage
+        FROM planogram_compliance pc
+        LEFT JOIN outlet_accounts oa ON pc.outlet_account_id = oa.id
+        LEFT JOIN Clients c ON c.outlet_account = pc.outlet_account_id
+        LEFT JOIN SalesRep sr ON c.route_id_update = sr.route_id_update
+        LEFT JOIN ProductReport pr ON pr.clientId = c.id AND pr.productId = pc.product_id
+        WHERE pr.createdAt IS NOT NULL
+          AND sr.leader_id = ?
+          ${region ? 'AND sr.region = ?' : ''}
+        GROUP BY DATE_FORMAT(pr.createdAt, '%Y-%m'), DATE_FORMAT(pr.createdAt, '%b %Y')
+        HAVING total_target > 0
+        ORDER BY month_key DESC
+        LIMIT 12
+      `, region ? [team_leader_id, region] : [team_leader_id]),
+
+      // 5. Get count of checked-in team members
+      db.query(`
+        SELECT COUNT(DISTINCT jp.userId) as checked_in_count
+        FROM \`JourneyPlan\` jp
+        INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
+        WHERE sr.status = 1
+          AND sr.leader_id = ?
+          ${region ? 'AND sr.region = ?' : ''}
+          AND jp.checkInTime IS NOT NULL
+          AND DATE(jp.checkInTime) = CURDATE()
+      `, region ? [team_leader_id, region] : [team_leader_id]),
+
+      // 6. Get unique outlets visited in current month
+      db.query(`
+        SELECT COUNT(DISTINCT jp.clientId) as outlets_visited_count
+        FROM JourneyPlan jp
+        INNER JOIN SalesRep sr ON jp.userId = sr.id
+        WHERE jp.status IN (1, 2)
+          AND jp.clientId IS NOT NULL
+          AND jp.date BETWEEN ? AND ?
+          AND sr.leader_id = ?
+          ${region ? 'AND sr.region = ?' : ''}
+      `, region ? [currentMonthStart, currentMonthEnd, team_leader_id, region] : [currentMonthStart, currentMonthEnd, team_leader_id])
+    ]);
+
+    // Process results
+    const salesReps = salesRepsResult.status === 'fulfilled' ? (salesRepsResult.value[0] || []) : [];
+    const orders = ordersResult.status === 'fulfilled' ? (ordersResult.value[0] || []) : [];
+    const pendingLeaves = leavesResult.status === 'fulfilled' ? ((leavesResult.value[0] || [])[0]?.pending_count || 0) : 0;
+    const planogramCompliance = planogramComplianceResult.status === 'fulfilled' ? (planogramComplianceResult.value[0] || []) : [];
+    const checkedInCount = checkedInRepsResult.status === 'fulfilled' ? ((checkedInRepsResult.value[0] || [])[0]?.checked_in_count || 0) : 0;
+    const outletsVisited = currentMonthOutletsVisitedResult.status === 'fulfilled' ? ((currentMonthOutletsVisitedResult.value[0] || [])[0]?.outlets_visited_count || 0) : 0;
+
+    // Calculate stats
+    const totalOrders = orders.length;
+    const totalSales = orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+    
+    // Calculate average performance (simplified - can be enhanced)
+    const avgPerformance = salesReps.length > 0 ? (totalSales / salesReps.length) : 0;
+
+    // Get top team members (by sales - simplified)
+    const salesByRep = {};
+    orders.forEach(order => {
+      const repId = order.route_id_update; // Simplified - should get from proper join
+      if (!salesByRep[repId]) {
+        salesByRep[repId] = { name: 'Team Member', total: 0 };
+      }
+      salesByRep[repId].total += Number(order.total_amount) || 0;
+    });
+    
+    const topTeamMembers = Object.values(salesByRep)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+      .map((m) => ({ name: m.name, overall: m.total }));
+
+    const dashboardData = {
+      stats: {
+        teamMembers: salesReps.length,
+        outletsVisitedThisMonth: outletsVisited,
+        totalOrders: totalOrders,
+        checkedInMembers: checkedInCount,
+        totalActiveMembers: salesReps.length,
+        avgTeamPerformance: avgPerformance,
+      },
+      planogramComplianceData: planogramCompliance.map((pc) => ({
+        month: pc.month,
+        compliance: Number(pc.compliance_percentage) || 0
+      })).reverse(),
+      topTeamMembers: topTeamMembers,
+      pendingLeavesCount: pendingLeaves,
+      newOrdersCount: 0, // Can be calculated if needed
+    };
+
+    const endTime = Date.now();
+    console.log(`[getTeamLeaderDashboardData] Completed in ${endTime - startTime}ms`);
+
+    res.json({
+      success: true,
+      data: dashboardData,
+      performanceMs: endTime - startTime
+    });
+
+  } catch (err) {
+    console.error('[getTeamLeaderDashboardData] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch team leader dashboard data',
+      message: err.message 
+    });
+  }
+};
+
+/**
+ * Get checked-in sales reps (filtered by team_leader_id and region)
+ */
+exports.getCheckedInSalesReps = async (req, res) => {
+  try {
+    const { team_leader_id, region } = req.query;
+    
+    if (!team_leader_id) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'team_leader_id is required' 
+      });
+    }
+    
+    let whereConditions = [
+      'sr.status = 1',
+      'sr.leader_id = ?',
+      'jp.checkInTime IS NOT NULL',
+      'DATE(jp.checkInTime) = CURDATE()'
+    ];
+    let queryParams = [team_leader_id];
+    
+    if (region) {
+      whereConditions.push('sr.region = ?');
+      queryParams.push(region);
+    }
+    
+    const [results] = await db.query(`
+      SELECT DISTINCT
+        sr.id,
+        sr.name,
+        sr.email,
+        r.name as route_name,
+        sr.region as region_name,
+        jp.checkInTime
+      FROM \`JourneyPlan\` jp
+      INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
+      LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
+      WHERE ${whereConditions.join(' AND ')}
+      ORDER BY jp.checkInTime DESC
+    `, queryParams);
+
+    res.json({
+      success: true,
+      data: results.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        route_name: r.route_name,
+        region_name: r.region_name,
+        checkInTime: r.checkInTime
+      }))
+    });
+
+  } catch (err) {
+    console.error('[getCheckedInSalesReps] Error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch checked-in sales reps',
       message: err.message 
     });
   }

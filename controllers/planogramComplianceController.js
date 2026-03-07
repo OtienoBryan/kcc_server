@@ -274,17 +274,60 @@ exports.getPlanogramComplianceReport = async (req, res) => {
       ? `WHERE ${whereConditions.join(' AND ')}` 
       : '';
     
+    // Build leader filter condition for aggregation
+    // Use conditional aggregation to include all ProductReports but only sum those from leader's sales reps
+    let leaderFilterCondition = '';
+    let leaderParams = [];
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      leaderFilterCondition = `AND sr.leader_id = ?`;
+      leaderParams.push(req.user.id);
+    }
+    
+    // Build count where clause
+    let countWhereConditions = [];
+    let countParams = [];
+    
+    if (outletAccountId && outletAccountId !== 'all') {
+      countWhereConditions.push('pc.outlet_account_id = ?');
+      countParams.push(parseInt(outletAccountId));
+    }
+    
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim()}%`;
+      countWhereConditions.push(`(p.product_name LIKE ? OR oa.name LIKE ?)`);
+      countParams.push(searchTerm, searchTerm);
+    }
+    
+    const countWhereClause = countWhereConditions.length > 0 
+      ? `WHERE ${countWhereConditions.join(' AND ')}` 
+      : '';
+    
     // Get total count (without date params)
+    // Note: We count all planogram compliance records, leader filter only affects ProductReport quantities
     const [countResult] = await db.query(`
       SELECT COUNT(DISTINCT pc.id) as total
       FROM planogram_compliance pc
       LEFT JOIN outlet_accounts oa ON pc.outlet_account_id = oa.id
       LEFT JOIN products p ON pc.product_id = p.id
-      ${whereClause}
-    `, params);
+      ${countWhereClause}
+    `, countParams);
     const total = countResult[0].total;
     
     // Main query: Get planogram compliance targets and compare with ProductReport quantities
+    // For leaders, use conditional aggregation to only sum ProductReports from assigned sales reps
+    // This ensures all ProductReports are joined, but only matching ones are included in the sum
+    let actualQuantityCase = leaderFilterCondition 
+      ? `CASE WHEN pr.id IS NOT NULL AND sr.leader_id = ? THEN pr.quantity ELSE 0 END`
+      : `CASE WHEN pr.id IS NOT NULL THEN pr.quantity ELSE 0 END`;
+    
+    let reportCountCase = leaderFilterCondition
+      ? `CASE WHEN pr.id IS NOT NULL AND sr.leader_id = ? THEN pr.id END`
+      : `pr.id`;
+    
+    let lastReportDateCase = leaderFilterCondition
+      ? `CASE WHEN pr.id IS NOT NULL AND sr.leader_id = ? THEN pr.createdAt END`
+      : `pr.createdAt`;
+    
     let query = `
       SELECT 
         pc.id,
@@ -294,9 +337,9 @@ exports.getPlanogramComplianceReport = async (req, res) => {
         oa.name as outlet_account_name,
         p.product_name,
         p.product_code,
-        COALESCE(SUM(pr.quantity), 0) as actual_quantity,
-        COUNT(DISTINCT pr.id) as report_count,
-        MAX(pr.createdAt) as last_report_date
+        COALESCE(SUM(${actualQuantityCase}), 0) as actual_quantity,
+        COUNT(DISTINCT ${reportCountCase}) as report_count,
+        MAX(${lastReportDateCase}) as last_report_date
       FROM planogram_compliance pc
       LEFT JOIN outlet_accounts oa ON pc.outlet_account_id = oa.id
       LEFT JOIN products p ON pc.product_id = p.id
@@ -304,13 +347,18 @@ exports.getPlanogramComplianceReport = async (req, res) => {
       LEFT JOIN ProductReport pr ON pr.clientId = c.id 
         AND pr.productId = pc.product_id
         ${productReportDateFilter}
+      LEFT JOIN SalesRep sr ON pr.userId = sr.id
       ${whereClause}
       GROUP BY pc.id, pc.outlet_account_id, pc.product_id, pc.compliance_quantity, oa.name, p.product_name, p.product_code
       ORDER BY oa.name ASC, p.product_name ASC
     `;
     
-    // Combine params: where params, date params
+    // Combine params: where params, date params, leader params (repeated 3 times for the 3 CASE statements)
     let mainParams = [...params, ...dateParams];
+    if (leaderFilterCondition) {
+      // Add leader param 3 times (once for each CASE statement: actual_quantity, report_count, last_report_date)
+      mainParams.push(...leaderParams, ...leaderParams, ...leaderParams);
+    }
     
     // Add LIMIT and OFFSET only if not viewing all
     if (!isViewAll) {
@@ -352,6 +400,7 @@ exports.getOutletAccountSummary = async (req, res) => {
     // Date filter for ProductReport
     let productReportDateFilter = '';
     let dateParams = [];
+    let leaderParams = [];
     
     if (startDate && endDate) {
       productReportDateFilter = `AND DATE(pr.createdAt) BETWEEN ? AND ?`;
@@ -362,6 +411,13 @@ exports.getOutletAccountSummary = async (req, res) => {
     } else if (endDate) {
       productReportDateFilter = `AND DATE(pr.createdAt) <= ?`;
       dateParams.push(endDate);
+    }
+    
+    // Leader filter
+    let leaderFilter = '';
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      leaderFilter = `AND sr.leader_id = ?`;
+      leaderParams.push(req.user.id);
     }
     
     // Query to get summary by outlet account
@@ -398,13 +454,17 @@ exports.getOutletAccountSummary = async (req, res) => {
         LEFT JOIN ProductReport pr ON pr.clientId = c.id 
           AND pr.productId = pc.product_id
           ${productReportDateFilter}
+        LEFT JOIN SalesRep sr ON pr.userId = sr.id
         WHERE pr.id IS NOT NULL
+        ${leaderFilter}
         GROUP BY pc.outlet_account_id
       ) actuals ON targets.outlet_account_id = actuals.outlet_account_id
       ORDER BY targets.outlet_account_name ASC
     `;
     
-    const [results] = await db.query(query, dateParams);
+    // Combine date params and leader params
+    const allParams = [...dateParams, ...leaderParams];
+    const [results] = await db.query(query, allParams);
     
     // Calculate overall compliance percentage for each outlet
     const summary = results.map(row => {

@@ -4,7 +4,7 @@ const salesRepController = {
   // Get all sales representatives
   getAllSalesReps: async (req, res) => {
     try {
-      const { status, country } = req.query;
+      const { status, country, leader_id, region } = req.query;
       
       const where = [];
       let params = [];
@@ -17,6 +17,16 @@ const salesRepController = {
       if (country) {
         where.push('s.country = ?');
         params.push(country);
+      }
+      
+      if (leader_id) {
+        where.push('s.leader_id = ?');
+        params.push(leader_id);
+      }
+      
+      if (region) {
+        where.push('s.region = ?');
+        params.push(region);
       }
       
       const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';

@@ -1223,15 +1223,24 @@ app.get('/api/feedback-sales-reps', authenticateToken, async (req, res) => {
   try {
     console.log('Feedback sales reps route hit!');
     
-    const sql = `
+    let sql = `
       SELECT DISTINCT u.id, u.name
       FROM SalesRep u
       INNER JOIN FeedbackReport fr ON fr.userId = u.id
       WHERE u.status = 1
-      ORDER BY u.name ASC
     `;
     
-    const [results] = await db.query(sql);
+    const params = [];
+    
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      sql += ` AND u.leader_id = ?`;
+      params.push(req.user.id);
+    }
+    
+    sql += ` ORDER BY u.name ASC`;
+    
+    const [results] = await db.query(sql, params);
     res.json({ success: true, data: results });
   } catch (err) {
     console.error('Error fetching feedback sales reps:', err);
@@ -1456,15 +1465,24 @@ app.get('/api/availability-sales-reps', authenticateToken, async (req, res) => {
   try {
     console.log('Availability sales reps route hit!');
     
-    const sql = `
+    let sql = `
       SELECT DISTINCT u.name
       FROM SalesRep u
       INNER JOIN ProductReport pr ON pr.userId = u.id
       WHERE u.status = 1
-      ORDER BY u.name ASC
     `;
     
-    const [results] = await db.query(sql);
+    const params = [];
+    
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      sql += ` AND u.leader_id = ?`;
+      params.push(req.user.id);
+    }
+    
+    sql += ` ORDER BY u.name ASC`;
+    
+    const [results] = await db.query(sql, params);
     const salesReps = results.map(row => row.name);
     res.json(salesReps);
   } catch (err) {

@@ -58,6 +58,12 @@ exports.getAllMyVisibilityReports = async (req, res) => {
       queryParams.push(endDate);
     }
 
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push('sr.leader_id = ?');
+      queryParams.push(req.user.id);
+    }
+
     const whereClause = whereConditions.length > 0 
       ? 'WHERE ' + whereConditions.join(' AND ') 
       : '';
@@ -141,11 +147,20 @@ exports.getFilterOptions = async (req, res) => {
       ORDER BY co.name
     `;
 
+    // Build sales reps query with leader filter if user is a leader
+    let salesRepsWhereClause = 'WHERE sr.name IS NOT NULL AND sr.status = 1';
+    let salesRepsParams = [];
+    
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      salesRepsWhereClause += ' AND sr.leader_id = ?';
+      salesRepsParams.push(req.user.id);
+    }
+    
     const salesRepsSql = `
       SELECT DISTINCT sr.name as salesRep
       FROM VisibilityReport vr
       LEFT JOIN SalesRep sr ON vr.userId = sr.id
-      WHERE sr.name IS NOT NULL AND sr.status = 1
+      ${salesRepsWhereClause}
       ORDER BY sr.name
     `;
 
@@ -158,7 +173,7 @@ exports.getFilterOptions = async (req, res) => {
 
     const [outlets] = await db.query(outletsSql);
     const [countries] = await db.query(countriesSql);
-    const [salesReps] = await db.query(salesRepsSql);
+    const [salesReps] = await db.query(salesRepsSql, salesRepsParams);
     const [photoTypes] = await db.query(photoTypesSql);
 
     res.json({

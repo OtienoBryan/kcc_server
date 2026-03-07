@@ -68,7 +68,7 @@ exports.getAllRoutes = async (req, res) => {
 // Get all sales reps
 exports.getAllSalesReps = async (req, res) => {
   try {
-    const { status, country } = req.query;
+    const { status, country, leader_id, region } = req.query;
     
     // Check if role column exists, if not use SELECT * and add default role
     let query = 'SELECT * FROM SalesRep';
@@ -83,6 +83,16 @@ exports.getAllSalesReps = async (req, res) => {
     if (country) {
       where.push('country = ?');
       params.push(country);
+    }
+    
+    if (leader_id) {
+      where.push('leader_id = ?');
+      params.push(leader_id);
+    }
+    
+    if (region) {
+      where.push('region = ?');
+      params.push(region);
     }
     
     if (where.length > 0) {
@@ -259,13 +269,17 @@ exports.assignManagersToSalesRep = async (req, res) => {
   }
 };
 
-// Get all team leaders (sales reps with role = 'team leader')
+// Get all team leaders from staff table where role = 'leader'
 exports.getAllTeamLeaders = async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT id, name, email, phoneNumber, country, region, route_name_update, photoUrl, status
-       FROM SalesRep
-       WHERE LOWER(TRIM(role)) = 'team leader' AND status = 1
+      `SELECT id, name, business_email as email, phone_number as phoneNumber, 
+              NULL as country, NULL as region, NULL as route_name_update, 
+              photo_url as photoUrl, 
+              CASE WHEN is_active = 1 OR is_active IS NULL THEN 1 ELSE 0 END as status
+       FROM staff
+       WHERE LOWER(TRIM(role)) = 'leader' 
+         AND (is_active = 1 OR is_active IS NULL)
        ORDER BY name`
     );
     res.json(rows);
@@ -274,21 +288,21 @@ exports.getAllTeamLeaders = async (req, res) => {
   }
 };
 
-// Get team leader assigned to a sales rep
+// Get team leader assigned to a sales rep (from staff table where role = 'leader')
 exports.getSalesRepTeamLeader = async (req, res) => {
   const { id } = req.params; // sales_rep_id
   try {
-    // First try to get from leader_id column in SalesRep table
+    // First try to get from leader_id column in SalesRep table (now references staff.id)
     const [salesRepRows] = await db.query(
-      `SELECT sr.leader_id, tl.id, tl.name, tl.email, tl.phoneNumber
+      `SELECT sr.leader_id, s.id, s.name, s.business_email as email, s.phone_number as phoneNumber
        FROM SalesRep sr
-       LEFT JOIN SalesRep tl ON sr.leader_id = tl.id
+       LEFT JOIN staff s ON sr.leader_id = s.id AND LOWER(TRIM(s.role)) = 'leader'
        WHERE sr.id = ? AND sr.leader_id IS NOT NULL
        LIMIT 1`,
       [id]
     );
     
-    if (salesRepRows.length > 0 && salesRepRows[0].leader_id) {
+    if (salesRepRows.length > 0 && salesRepRows[0].leader_id && salesRepRows[0].id) {
       return res.json({
         id: salesRepRows[0].id,
         name: salesRepRows[0].name,
@@ -310,9 +324,9 @@ exports.getSalesRepTeamLeader = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      `SELECT srtl.team_leader_id, sr.id, sr.name, sr.email, sr.phoneNumber
+      `SELECT srtl.team_leader_id, s.id, s.name, s.business_email as email, s.phone_number as phoneNumber
        FROM sales_rep_team_leaders srtl
-       JOIN SalesRep sr ON srtl.team_leader_id = sr.id
+       JOIN staff s ON srtl.team_leader_id = s.id AND LOWER(TRIM(s.role)) = 'leader'
        WHERE srtl.sales_rep_id = ?
        LIMIT 1`,
       [id]
@@ -329,7 +343,7 @@ exports.getSalesRepTeamLeader = async (req, res) => {
   }
 };
 
-// Assign team leader to a sales rep
+// Assign team leader to a sales rep (team leader must be from staff table where role = 'leader')
 exports.assignTeamLeaderToSalesRep = async (req, res) => {
   const { id } = req.params; // sales_rep_id
   const { team_leader_id } = req.body;
@@ -338,9 +352,9 @@ exports.assignTeamLeaderToSalesRep = async (req, res) => {
     return res.status(400).json({ error: 'team_leader_id is required' });
   }
 
-  // Check if the sales rep is already a team leader
+  // Check if the sales rep exists
   const [salesRepCheck] = await db.query(
-    `SELECT id, role FROM SalesRep WHERE id = ?`,
+    `SELECT id FROM SalesRep WHERE id = ?`,
     [id]
   );
   
@@ -348,9 +362,14 @@ exports.assignTeamLeaderToSalesRep = async (req, res) => {
     return res.status(404).json({ error: 'Sales rep not found' });
   }
   
-  const salesRepRole = (salesRepCheck[0].role || '').toLowerCase().trim();
-  if (salesRepRole === 'team leader') {
-    return res.status(400).json({ error: 'Cannot assign a team leader to another team leader' });
+  // Verify that the team_leader_id exists in staff table with role = 'leader'
+  const [teamLeaderCheck] = await db.query(
+    `SELECT id, name FROM staff WHERE id = ? AND LOWER(TRIM(role)) = 'leader'`,
+    [team_leader_id]
+  );
+  
+  if (teamLeaderCheck.length === 0) {
+    return res.status(404).json({ error: 'Team leader not found. Team leaders must be from staff table with role = "leader"' });
   }
 
   const conn = await db.getConnection();
@@ -370,7 +389,7 @@ exports.assignTeamLeaderToSalesRep = async (req, res) => {
       }
     }
     
-    // Create table if it doesn't exist
+    // Create table if it doesn't exist (team_leader_id now references staff.id)
     await conn.query(`
       CREATE TABLE IF NOT EXISTS sales_rep_team_leaders (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -379,10 +398,34 @@ exports.assignTeamLeaderToSalesRep = async (req, res) => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY unique_sales_rep_team_leader (sales_rep_id, team_leader_id),
-        FOREIGN KEY (sales_rep_id) REFERENCES SalesRep(id) ON DELETE CASCADE,
-        FOREIGN KEY (team_leader_id) REFERENCES SalesRep(id) ON DELETE CASCADE
+        FOREIGN KEY (sales_rep_id) REFERENCES SalesRep(id) ON DELETE CASCADE
       )
     `);
+    
+    // Try to drop old foreign key if it exists and add new one referencing staff table
+    try {
+      await conn.query(`
+        ALTER TABLE sales_rep_team_leaders 
+        DROP FOREIGN KEY IF EXISTS sales_rep_team_leaders_ibfk_2
+      `);
+    } catch (dropErr) {
+      // Foreign key might not exist or have different name, ignore
+    }
+    
+    // Add foreign key to staff table if it doesn't exist
+    try {
+      await conn.query(`
+        ALTER TABLE sales_rep_team_leaders 
+        ADD CONSTRAINT fk_team_leader_staff 
+        FOREIGN KEY (team_leader_id) REFERENCES staff(id) ON DELETE CASCADE
+      `);
+    } catch (fkErr) {
+      // Foreign key might already exist, ignore
+      if (!fkErr.message.includes('Duplicate foreign key')) {
+        // Log but don't fail - the constraint might already be correct
+        console.log('Note: Could not add foreign key constraint:', fkErr.message);
+      }
+    }
     
     // Update leader_id in SalesRep table
     await conn.query(

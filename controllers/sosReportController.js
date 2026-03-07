@@ -129,6 +129,13 @@ exports.getAllSosReports = async (req, res) => {
       countParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push(`sr.leader_id = ?`);
+      params.push(req.user.id);
+      countParams.push(req.user.id);
+    }
+
     if (whereConditions.length > 0) {
       const whereClause = ` WHERE ${whereConditions.join(' AND ')}`;
       sql += whereClause;
@@ -269,6 +276,12 @@ exports.exportSosReportsCSV = async (req, res) => {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push(`sr.leader_id = ?`);
+      params.push(req.user.id);
+    }
+
     if (whereConditions.length > 0) {
       sql += ` WHERE ${whereConditions.join(' AND ')}`;
     }
@@ -358,13 +371,28 @@ exports.getSosReportOutlets = async (req, res) => {
 // Distinct reps used in SOS reports
 exports.getSosReportReps = async (req, res) => {
   try {
-    const sql = `
+    let sql = `
       SELECT DISTINCT sr.id, sr.name
       FROM sos_report s
       INNER JOIN SalesRep sr ON s.rep_id = sr.id
-      ORDER BY sr.name ASC
     `;
-    const [results] = await db.query(sql);
+    
+    const params = [];
+    let whereConditions = [];
+    
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push(`sr.leader_id = ?`);
+      params.push(req.user.id);
+    }
+    
+    if (whereConditions.length > 0) {
+      sql += ` WHERE ${whereConditions.join(' AND ')}`;
+    }
+    
+    sql += ` ORDER BY sr.name ASC`;
+    
+    const [results] = await db.query(sql, params);
     res.json({ success: true, data: results });
   } catch (err) {
     console.error('Error fetching SOS reps:', err);

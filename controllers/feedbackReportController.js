@@ -57,6 +57,14 @@ exports.getAllFeedbackReports = async (req, res) => {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
       countParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
+    
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push(`u.leader_id = ?`);
+      params.push(req.user.id);
+      countParams.push(req.user.id);
+    }
+    
     if (whereConditions.length > 0) {
       const whereClause = ` WHERE ${whereConditions.join(' AND ')}`;
       sql += whereClause;
@@ -126,6 +134,13 @@ exports.exportFeedbackReportsCSV = async (req, res) => {
       whereConditions.push(`(c.name LIKE ? OR co.name LIKE ? OR u.name LIKE ? OR fr.comment LIKE ?)`);
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
+    
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      whereConditions.push(`u.leader_id = ?`);
+      params.push(req.user.id);
+    }
+    
     if (whereConditions.length > 0) {
       const whereClause = ` WHERE ${whereConditions.join(' AND ')}`;
       sql += whereClause;
