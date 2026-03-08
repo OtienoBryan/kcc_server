@@ -88,7 +88,18 @@ router.delete('/customers/:id', authenticateToken, customersController.deleteCus
 // Products Routes (Protected with authentication)
 router.get('/products', authenticateToken, productsController.getAllProducts);
 router.get('/products/:id', authenticateToken, productsController.getProductById);
-router.post('/products', authenticateToken, uploadProductImageMulter.single('image'), createProduct);
+router.post('/products', authenticateToken, (req, res, next) => {
+  console.log('📥 POST /products route hit');
+  console.log('Content-Type:', req.headers['content-type']);
+  uploadProductImageMulter.single('image')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Multer error:', err);
+      return res.status(400).json({ success: false, error: 'File upload error: ' + err.message });
+    }
+    console.log('✅ Multer passed, calling createProduct');
+    next();
+  });
+}, createProduct);
 router.put('/products/:id', authenticateToken, productsController.updateProduct);
 router.delete('/products/:id', authenticateToken, productsController.deleteProduct);
 router.post('/products/:id/image', authenticateToken, uploadProductImageMulter.single('image'), uploadProductImage);

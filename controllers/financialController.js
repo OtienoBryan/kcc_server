@@ -526,24 +526,204 @@ const productsController = {
   // Create new product
   createProduct: async (req, res) => {
     try {
+      console.log('=== CREATE PRODUCT START ===');
+      console.log('Request body keys:', Object.keys(req.body));
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('Request file:', req.file ? { fieldname: req.file.fieldname, originalname: req.file.originalname, mimetype: req.file.mimetype } : 'No file');
+      console.log('Request headers content-type:', req.headers['content-type']);
+      
+      // Handle FormData - extract fields from req.body
       const { 
-        product_code, product_name, description, category, unit_of_measure,
-        cost_price, selling_price, reorder_level, current_stock 
+        product_code, product_name, description, category, category_id, brand_id,
+        unit_of_measure, cost_price, selling_price, reorder_level, current_stock 
       } = req.body;
       
+      console.log('Extracted values:');
+      console.log('  product_code:', product_code, typeof product_code);
+      console.log('  product_name:', product_name, typeof product_name);
+      console.log('  category_id:', category_id, typeof category_id);
+      console.log('  brand_id:', brand_id, typeof brand_id);
+      console.log('  cost_price:', cost_price, typeof cost_price);
+      
+      // Validation - Required fields: name, code, category, brand
+      if (!product_code || product_code.trim() === '') {
+        console.log('❌ Validation failed - product_code is required');
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Product code is required'
+        });
+      }
+      
+      if (!product_name || product_name.trim() === '') {
+        console.log('❌ Validation failed - product_name is required');
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Product name is required'
+        });
+      }
+      
+      // Validate category_id is provided and valid
+      if (!category_id || category_id === '' || category_id === 'undefined' || category_id === 'null') {
+        console.log('❌ Validation failed - category_id is required or invalid');
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Category is required'
+        });
+      }
+      
+      // Validate brand_id is provided and valid
+      if (!brand_id || brand_id === '' || brand_id === 'undefined' || brand_id === 'null') {
+        console.log('❌ Validation failed - brand_id is required or invalid');
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Brand is required'
+        });
+      }
+      
+      // If category_id is provided, fetch the category name
+      let categoryName = category || '';
+      let finalCategoryId = null;
+      const categoryIdNum = parseInt(category_id, 10);
+      if (isNaN(categoryIdNum)) {
+        console.log('❌ Validation failed - invalid category_id:', category_id);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid category ID',
+          received: { category_id }
+        });
+      }
+      
+      console.log('✅ Category ID parsed:', categoryIdNum);
+      finalCategoryId = categoryIdNum;
+      const [categoryRows] = await db.query('SELECT name FROM Category WHERE id = ?', [categoryIdNum]);
+      if (categoryRows.length === 0) {
+        console.log('❌ Validation failed - category not found:', categoryIdNum);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Category not found',
+          received: { category_id: categoryIdNum }
+        });
+      }
+      categoryName = categoryRows[0].name;
+      console.log('✅ Category found:', categoryName);
+      
+      // Handle image upload if present
+      let imageUrl = null;
+      if (req.file) {
+        try {
+          const cloudinary = require('../config/cloudinary');
+          const b64 = Buffer.from(req.file.buffer).toString('base64');
+          const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+          
+          const result = await cloudinary.uploader.upload(dataURI, {
+            folder: 'products',
+            public_id: `product_${Date.now()}`,
+            resource_type: 'image'
+          });
+          imageUrl = result.secure_url;
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          // Continue without image if upload fails
+        }
+      }
+      
+      // Parse brand_id
+      const brandIdNum = parseInt(brand_id, 10);
+      if (isNaN(brandIdNum) || brandIdNum <= 0) {
+        console.log('❌ Validation failed - invalid brand_id:', brand_id);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid brand ID'
+        });
+      }
+      
+      // Verify brand exists
+      const [brandRows] = await db.query('SELECT name FROM Brand WHERE id = ?', [brandIdNum]);
+      if (brandRows.length === 0) {
+        console.log('❌ Validation failed - brand not found:', brandIdNum);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Brand not found'
+        });
+      }
+      console.log('✅ Brand found:', brandRows[0].name);
+      
+      // Set default values for optional fields
+      const finalUnitOfMeasure = unit_of_measure || 'PCS';
+      const finalCostPrice = cost_price ? parseFloat(cost_price) : 0;
+      const finalSellingPrice = selling_price ? parseFloat(selling_price) : 0;
+      const finalReorderLevel = reorder_level ? parseFloat(reorder_level) : 0;
+      const finalCurrentStock = current_stock ? parseFloat(current_stock) : 0;
+      
+      // Build the INSERT query with required fields: name, code, category, brand
+      const fields = ['product_code', 'product_name', 'description', 'category', 'category_id', 'brand_id', 'unit_of_measure', 'cost_price', 'selling_price', 'reorder_level', 'current_stock'];
+      const values = [product_code, product_name, description || '', categoryName, finalCategoryId, brandIdNum, finalUnitOfMeasure, finalCostPrice, finalSellingPrice, finalReorderLevel, finalCurrentStock];
+      
+      // Add image_url if uploaded
+      if (imageUrl) {
+        fields.push('image_url');
+        values.push(imageUrl);
+      }
+      
+      // Add image_url if uploaded
+      if (imageUrl) {
+        fields.push('image_url');
+        values.push(imageUrl);
+      }
+      
+      // Validate that we have all required fields before inserting
+      if (fields.length !== values.length) {
+        console.error('❌ Field/Value mismatch:', { fieldsCount: fields.length, valuesCount: values.length });
+        return res.status(500).json({ 
+          success: false, 
+          error: 'Internal error: Field/Value mismatch' 
+        });
+      }
+      
+      const fieldsList = fields.join(', ');
+      const placeholders = fields.map(() => '?').join(', ');
+      
+      console.log('📝 Inserting product:');
+      console.log('  Fields:', fieldsList);
+      console.log('  Values:', values);
+      console.log('  Values types:', values.map(v => typeof v));
+      console.log('  Placeholders:', placeholders);
+      
       const [result] = await db.query(`
-        INSERT INTO products (product_code, product_name, description, category, unit_of_measure, cost_price, selling_price, reorder_level, current_stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [product_code, product_name, description, category, unit_of_measure, cost_price, selling_price, reorder_level, current_stock]);
+        INSERT INTO products (${fieldsList})
+        VALUES (${placeholders})
+      `, values);
+      
+      console.log('✅ Database insert successful, ID:', result.insertId);
+      
+      // Fetch the created product to return full data
+      const [productRows] = await db.query('SELECT * FROM products WHERE id = ?', [result.insertId]);
+      
+      console.log('✅ Product created successfully with ID:', result.insertId);
+      console.log('=== CREATE PRODUCT SUCCESS ===');
       
       res.status(201).json({ 
         success: true, 
-        data: { id: result.insertId, product_code, product_name },
+        data: productRows[0] || { id: result.insertId, product_code, product_name },
         message: 'Product created successfully' 
       });
     } catch (error) {
-      console.error('Error creating product:', error);
-      res.status(500).json({ success: false, error: 'Failed to create product' });
+      console.error('❌ ERROR creating product:');
+      console.error('  Error message:', error.message);
+      console.error('  Error code:', error.code);
+      console.error('  Error sqlState:', error.sqlState);
+      console.error('  Error sqlMessage:', error.sqlMessage);
+      console.error('  Error stack:', error.stack);
+      console.log('=== CREATE PRODUCT ERROR ===');
+      
+      // Return more detailed error for debugging
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to create product',
+        details: error.message,
+        code: error.code,
+        sqlMessage: error.sqlMessage
+      });
     }
   },
 
@@ -2034,49 +2214,105 @@ const uploadProductImage = async (req, res) => {
 // Create product with optional image upload
 const createProduct = async (req, res) => {
   try {
+    console.log('=== CREATE PRODUCT (standalone) START ===');
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
     const { product_name, product_code, category_id, brand_id, cost_price } = req.body;
-    if (!product_name || !product_code || !category_id || !brand_id || !cost_price) {
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    
+    // Validation - Required fields: name, code, category, brand
+    if (!product_code || product_code.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Product code is required' });
     }
+    
+    if (!product_name || product_name.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Product name is required' });
+    }
+    
+    if (!category_id || category_id === '' || category_id === 'undefined' || category_id === 'null') {
+      return res.status(400).json({ success: false, error: 'Category is required' });
+    }
+    
+    if (!brand_id || brand_id === '' || brand_id === 'undefined' || brand_id === 'null') {
+      return res.status(400).json({ success: false, error: 'Brand is required' });
+    }
+    
+    // Parse IDs
+    const categoryIdNum = parseInt(category_id, 10);
+    const brandIdNum = parseInt(brand_id, 10);
+    
+    if (isNaN(categoryIdNum) || categoryIdNum <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid category ID' });
+    }
+    
+    if (isNaN(brandIdNum) || brandIdNum <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid brand ID' });
+    }
+    
+    // Verify category exists
+    const [catRows] = await db.query('SELECT name FROM Category WHERE id = ?', [categoryIdNum]);
+    if (catRows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Category not found' });
+    }
+    const categoryName = catRows[0].name;
+    
+    // Verify brand exists
+    const [brandRows] = await db.query('SELECT name FROM Brand WHERE id = ?', [brandIdNum]);
+    if (brandRows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Brand not found' });
+    }
+    
+    // Handle image upload if present
     let imageUrl = null;
     if (req.file) {
-      // Convert buffer to base64 for Cloudinary
-      const b64 = Buffer.from(req.file.buffer).toString('base64');
-      const dataURI = `data:${req.file.mimetype};base64,${b64}`;
-      
-      // Upload to Cloudinary
-      const result = await cloudinary.uploader.upload(dataURI, {
-        folder: 'products',
-        public_id: `product_${product_code}_${Date.now()}`,
-        resource_type: 'image',
-      });
-      imageUrl = result.secure_url;
+      try {
+        // Convert buffer to base64 for Cloudinary
+        const b64 = Buffer.from(req.file.buffer).toString('base64');
+        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+        
+        // Upload to Cloudinary
+        const result = await cloudinary.uploader.upload(dataURI, {
+          folder: 'products',
+          public_id: `product_${product_code}_${Date.now()}`,
+          resource_type: 'image',
+        });
+        imageUrl = result.secure_url;
+      } catch (uploadError) {
+        console.error('Error uploading image:', uploadError);
+        // Continue without image if upload fails
+      }
     }
-    // Get category name for denormalized field
-    let categoryName = '';
-    const [catRows] = await db.query('SELECT name FROM Category WHERE id = ?', [category_id]);
-    if (catRows.length > 0) categoryName = catRows[0].name;
     
-    // Get brand name for denormalized field
-    let brandName = null;
-    const [brandRows] = await db.query('SELECT name FROM Brand WHERE id = ?', [brand_id]);
-    if (brandRows.length > 0) brandName = brandRows[0].name;
+    // Set default values for optional fields
+    const finalCostPrice = cost_price ? parseFloat(cost_price) : 0;
+    const finalUnitOfMeasure = 'PCS';
+    const finalSellingPrice = 0;
+    const finalReorderLevel = 0;
+    const finalCurrentStock = 0;
     
     const [result] = await db.query(
-      `INSERT INTO products (product_code, product_name, category, category_id, brand_id, cost_price, image_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [product_code, product_name, categoryName, category_id, brand_id, cost_price, imageUrl]
+      `INSERT INTO products (product_code, product_name, description, category, category_id, brand_id, unit_of_measure, cost_price, selling_price, reorder_level, current_stock, image_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [product_code, product_name, '', categoryName, categoryIdNum, brandIdNum, finalUnitOfMeasure, finalCostPrice, finalSellingPrice, finalReorderLevel, finalCurrentStock, imageUrl]
     );
+    
     const [rows] = await db.query(`
       SELECT p.*, b.name as brand 
       FROM products p
       LEFT JOIN Brand b ON p.brand_id = b.id
       WHERE p.id = ?
     `, [result.insertId]);
+    
+    console.log('✅ Product created successfully with ID:', result.insertId);
     res.status(201).json({ success: true, data: rows[0] });
   } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ success: false, error: 'Failed to create product' });
+    console.error('❌ Error creating product:', error);
+    console.error('Error details:', error.message, error.code, error.sqlMessage);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create product',
+      details: error.message 
+    });
   }
 };
 
