@@ -361,4 +361,11 @@ router.get('/returns', authenticateToken, returnsController.getAllReturns);
 router.get('/returns/:id', authenticateToken, returnsController.getReturnById);
 router.get('/returns/:id/items', authenticateToken, returnsController.getReturnItems);
 
+// Non Supplies Routes (Protected with authentication)
+const nonSuppliesController = require('../controllers/nonSuppliesController');
+router.get('/non-supplies', authenticateToken, nonSuppliesController.getAllNonSupplies);
+router.get('/non-supplies/:id', authenticateToken, nonSuppliesController.getNonSupplyById);
+router.get('/non-supplies/:id/items', authenticateToken, nonSuppliesController.getNonSupplyItems);
+router.get('/non-supplies/items/summary', authenticateToken, nonSuppliesController.getNonSupplyItemsSummary);
+
 module.exports = router; 
