@@ -148,11 +148,76 @@ exports.updateSalesRep = async (req, res) => {
   console.log('Params id:', id);
   console.log('Body:', req.body);
   try {
-    console.log('SQL params:', [name, email, phone, country, region, route_name_update, photoUrl, role, expected_weekly_coverage, id]);
+    // Look up region_id from region name if region is provided
+    let region_id = null;
+    if (region && region !== '') {
+      try {
+        // Try Regions table first (capital R)
+        const [regionRows] = await db.query('SELECT id FROM Regions WHERE name = ?', [region]);
+        if (regionRows.length > 0) {
+          region_id = regionRows[0].id;
+          console.log('Found region_id:', region_id, 'for region:', region);
+        } else {
+          // Try regions table (lowercase r)
+          const [regionRowsLower] = await db.query('SELECT id FROM regions WHERE name = ?', [region]);
+          if (regionRowsLower.length > 0) {
+            region_id = regionRowsLower[0].id;
+            console.log('Found region_id:', region_id, 'for region:', region);
+          } else {
+            console.log('Region not found:', region);
+          }
+        }
+      } catch (err) {
+        console.log('Error looking up region_id:', err.message);
+      }
+    }
+    
+    // Look up route_id from route name if route_name_update is provided
+    let route_id_update = null;
+    if (route_name_update && route_name_update !== '') {
+      try {
+        const [routeRows] = await db.query('SELECT id FROM routes WHERE name = ?', [route_name_update]);
+        if (routeRows.length > 0) {
+          route_id_update = routeRows[0].id;
+          console.log('Found route_id_update:', route_id_update, 'for route:', route_name_update);
+        } else {
+          console.log('Route not found:', route_name_update);
+        }
+      } catch (err) {
+        console.log('Error looking up route_id_update:', err.message);
+      }
+    }
+    
+    // Build UPDATE query with region_id and route_id_update
+    const updates = [];
+    const values = [];
+    
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (email !== undefined) { updates.push('email = ?'); values.push(email); }
+    if (phone !== undefined) { updates.push('phoneNumber = ?'); values.push(phone); }
+    if (country !== undefined) { updates.push('country = ?'); values.push(country); }
+    if (region !== undefined) { updates.push('region = ?'); values.push(region); }
+    if (region_id !== null) { updates.push('region_id = ?'); values.push(region_id); }
+    if (route_name_update !== undefined) { updates.push('route_name_update = ?'); values.push(route_name_update); }
+    if (route_id_update !== null) { updates.push('route_id_update = ?'); values.push(route_id_update); }
+    if (photoUrl !== undefined) { updates.push('photoUrl = ?'); values.push(photoUrl); }
+    if (role !== undefined) { updates.push('role = ?'); values.push(role || 'sales rep'); }
+    if (expected_weekly_coverage !== undefined) { updates.push('expected_weekly_coverage = ?'); values.push(expected_weekly_coverage || null); }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields provided for update' });
+    }
+    
+    values.push(id);
+    
+    console.log('SQL UPDATE:', `UPDATE SalesRep SET ${updates.join(', ')} WHERE id = ?`);
+    console.log('SQL values:', values);
+    
     await db.query(
-      'UPDATE SalesRep SET name = ?, email = ?, phoneNumber = ?, country = ?, region = ?, route_name_update = ?, photoUrl = ?, role = ?, expected_weekly_coverage = ? WHERE id = ?',
-      [name, email, phone, country, region, route_name_update, photoUrl, role || 'sales rep', expected_weekly_coverage || null, id]
+      `UPDATE SalesRep SET ${updates.join(', ')} WHERE id = ?`,
+      values
     );
+    
     res.json({ 
       id, 
       name, 
@@ -160,7 +225,9 @@ exports.updateSalesRep = async (req, res) => {
       phone, 
       country, 
       region, 
-      route_name_update, 
+      region_id,
+      route_name_update,
+      route_id_update,
       photoUrl,
       role: role || 'sales rep',
       expected_weekly_coverage: expected_weekly_coverage || null
