@@ -488,9 +488,10 @@ const productsController = {
   getAllProducts: async (req, res) => {
     try {
       const [rows] = await db.query(`
-        SELECT p.*, b.name as brand 
+        SELECT p.*, b.name as brand, s.id as sku_id, s.sku as sku
         FROM products p
         LEFT JOIN Brand b ON p.brand_id = b.id
+        LEFT JOIN skus s ON p.sku_id = s.id
         WHERE p.is_active = true 
         ORDER BY p.product_name
       `);
@@ -506,9 +507,10 @@ const productsController = {
     try {
       const { id } = req.params;
       const [rows] = await db.query(`
-        SELECT p.*, b.name as brand 
+        SELECT p.*, b.name as brand, s.id as sku_id, s.sku as sku
         FROM products p
         LEFT JOIN Brand b ON p.brand_id = b.id
+        LEFT JOIN skus s ON p.sku_id = s.id
         WHERE p.id = ?
       `, [id]);
       
@@ -855,6 +857,154 @@ const productsController = {
       console.error('Error fetching low stock products:', error);
       res.status(500).json({ success: false, error: 'Failed to fetch low stock products' });
     }
+  }
+};
+
+// ──────────────────────────── SKUs (master) ────────────────────────────
+const listSkus = async (_req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, sku, is_active, created_at, updated_at
+       FROM skus
+       ORDER BY is_active DESC, sku ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching skus:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch skus' });
+  }
+};
+
+const createSku = async (req, res) => {
+  try {
+    const skuRaw = (req.body?.sku ?? '').toString();
+    const sku = skuRaw.trim();
+    if (!sku) return res.status(400).json({ success: false, error: 'SKU is required' });
+
+    const [result] = await db.query(
+      `INSERT INTO skus (sku, is_active) VALUES (?, 1)`,
+      [sku]
+    );
+    const [rows] = await db.query(
+      `SELECT id, sku, is_active, created_at, updated_at FROM skus WHERE id = ?`,
+      [result.insertId]
+    );
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    if (error && (error.code === 'ER_DUP_ENTRY' || error.errno === 1062)) {
+      return res.status(409).json({ success: false, error: 'This SKU already exists' });
+    }
+    console.error('Error creating sku:', error);
+    res.status(500).json({ success: false, error: 'Failed to create sku' });
+  }
+};
+
+const updateSku = async (req, res) => {
+  try {
+    const skuId = Number(req.params.skuId);
+    if (!Number.isFinite(skuId)) return res.status(400).json({ success: false, error: 'Invalid sku id' });
+
+    const skuRaw = req.body?.sku;
+    const isActiveRaw = req.body?.is_active;
+    const updates = [];
+    const params = [];
+
+    if (skuRaw !== undefined) {
+      const sku = skuRaw.toString().trim();
+      if (!sku) return res.status(400).json({ success: false, error: 'SKU cannot be empty' });
+      updates.push('sku = ?');
+      params.push(sku);
+    }
+    if (isActiveRaw !== undefined) {
+      updates.push('is_active = ?');
+      params.push(Number(isActiveRaw) ? 1 : 0);
+    }
+    if (updates.length === 0) return res.status(400).json({ success: false, error: 'Nothing to update' });
+
+    params.push(skuId);
+    const [result] = await db.query(
+      `UPDATE skus SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ?`,
+      params
+    );
+    if (!result.affectedRows) return res.status(404).json({ success: false, error: 'SKU not found' });
+
+    const [rows] = await db.query(
+      `SELECT id, sku, is_active, created_at, updated_at FROM skus WHERE id = ?`,
+      [skuId]
+    );
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    if (error && (error.code === 'ER_DUP_ENTRY' || error.errno === 1062)) {
+      return res.status(409).json({ success: false, error: 'This SKU already exists' });
+    }
+    console.error('Error updating sku:', error);
+    res.status(500).json({ success: false, error: 'Failed to update sku' });
+  }
+};
+
+const deleteSku = async (req, res) => {
+  try {
+    const skuId = Number(req.params.skuId);
+    if (!Number.isFinite(skuId)) return res.status(400).json({ success: false, error: 'Invalid sku id' });
+
+    const [result] = await db.query(`DELETE FROM skus WHERE id = ?`, [skuId]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, error: 'SKU not found' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting sku:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete sku' });
+  }
+};
+
+// ──────────────────────────── Product SKU (one per product) ────────────────────────────
+const getProductSku = async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+    if (!Number.isFinite(productId)) return res.status(400).json({ success: false, error: 'Invalid product id' });
+
+    const [rows] = await db.query(
+      `SELECT p.id as product_id, p.sku_id, s.sku
+       FROM products p
+       LEFT JOIN skus s ON p.sku_id = s.id
+       WHERE p.id = ?`,
+      [productId]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, error: 'Product not found' });
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    console.error('Error fetching product sku:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch product sku' });
+  }
+};
+
+const setProductSku = async (req, res) => {
+  try {
+    const productId = Number(req.params.id);
+    const skuIdRaw = req.body?.sku_id;
+    const skuId = skuIdRaw === null || skuIdRaw === '' || skuIdRaw === undefined ? null : Number(skuIdRaw);
+
+    if (!Number.isFinite(productId)) return res.status(400).json({ success: false, error: 'Invalid product id' });
+    if (skuId !== null && !Number.isFinite(skuId)) return res.status(400).json({ success: false, error: 'Invalid sku id' });
+
+    if (skuId !== null) {
+      const [skuRows] = await db.query(`SELECT id FROM skus WHERE id = ?`, [skuId]);
+      if (!skuRows.length) return res.status(404).json({ success: false, error: 'SKU not found' });
+    }
+
+    const [result] = await db.query(`UPDATE products SET sku_id = ? WHERE id = ?`, [skuId, productId]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, error: 'Product not found' });
+
+    const [rows] = await db.query(
+      `SELECT p.id as product_id, p.sku_id, s.sku
+       FROM products p
+       LEFT JOIN skus s ON p.sku_id = s.id
+       WHERE p.id = ?`,
+      [productId]
+    );
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    console.error('Error setting product sku:', error);
+    res.status(500).json({ success: false, error: 'Failed to set product sku' });
   }
 };
 
@@ -2798,6 +2948,12 @@ module.exports = {
   customersController,
   productsController,
   dashboardController,
+  listSkus,
+  createSku,
+  updateSku,
+  deleteSku,
+  getProductSku,
+  setProductSku,
   postExpense,
   postDepreciation,
   addEquityEntry,

@@ -75,7 +75,7 @@ const journeyPlanController = {
   // Get all journey plans (with optional date, country, team_leader_id filtering, and limit)
   getAllJourneyPlans: async (req, res) => {
     try {
-      const { startDate, endDate, country, limit, team_leader_id } = req.query;
+      const { startDate, endDate, country, limit, team_leader_id, status, region } = req.query;
       const limitValue = limit ? parseInt(limit, 10) : null;
 
       // Build SQL query with JOIN to SalesRep for country and team leader filtering
@@ -99,12 +99,16 @@ const journeyPlanController = {
           jp.routeId,
           sr.name as user_name,
           sr.country as sales_rep_country,
+          sr.region as region_name,
+          sr.role as user_role,
           c.name as client_name,
-          r.name as route_name
+          COALESCE(r_route.name, c_route.name, sr_route.name) as route_name
         FROM JourneyPlan jp
         LEFT JOIN SalesRep sr ON jp.userId = sr.id
         LEFT JOIN Clients c ON jp.clientId = c.id
-        LEFT JOIN routes r ON jp.routeId = r.id
+        LEFT JOIN routes r_route ON jp.routeId = r_route.id
+        LEFT JOIN routes c_route ON c.route_id_update = c_route.id
+        LEFT JOIN routes sr_route ON sr.route_id_update = sr_route.id
       `;
       const params = [];
       const where = [];
@@ -121,16 +125,29 @@ const journeyPlanController = {
         params.push(endDate);
       }
       
-      // Country filtering
+      // Country filtering (deprecated for activity page; keep for compatibility)
       if (country) {
         where.push('sr.country = ?');
         params.push(country);
       }
+
+      // Status filtering
+      if (status !== undefined && status !== '') {
+        where.push('jp.status = ?');
+        params.push(Number(status));
+      }
+
+      // Region filtering
+      if (region) {
+        where.push('sr.region = ?');
+        params.push(region);
+      }
       
       // Team leader filtering - only show journey plans for sales reps assigned to this team leader
-      if (team_leader_id) {
+      const effectiveTeamLeaderId = team_leader_id || (req.user && req.user.role === 'leader' ? req.user.id : null);
+      if (effectiveTeamLeaderId) {
         where.push('sr.leader_id = ?');
-        params.push(team_leader_id);
+        params.push(effectiveTeamLeaderId);
       }
       
       if (where.length) {

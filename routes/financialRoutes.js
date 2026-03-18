@@ -32,6 +32,12 @@ const {
   addCategoryPriceOption,
   updateCategoryPriceOption,
   deleteCategoryPriceOption,
+  listSkus,
+  createSku,
+  updateSku,
+  deleteSku,
+  getProductSku,
+  setProductSku,
   uploadProductImage,
   uploadProductImageMulter,
   createProduct,
@@ -104,6 +110,17 @@ router.put('/products/:id', authenticateToken, productsController.updateProduct)
 router.delete('/products/:id', authenticateToken, productsController.deleteProduct);
 router.post('/products/:id/image', authenticateToken, uploadProductImageMulter.single('image'), uploadProductImage);
 router.get('/products/low-stock', authenticateToken, productsController.getLowStockProducts);
+
+// Product SKUs (Protected with authentication)
+// SKUs (Protected with authentication)
+router.get('/skus', authenticateToken, listSkus);
+router.post('/skus', authenticateToken, createSku);
+router.put('/skus/:skuId', authenticateToken, updateSku);
+router.delete('/skus/:skuId', authenticateToken, deleteSku);
+
+// Product SKU assignment (one per product)
+router.get('/products/:id/sku', authenticateToken, getProductSku);
+router.put('/products/:id/sku', authenticateToken, setProductSku);
 
 // Dashboard Routes (Protected with authentication)
 router.get('/dashboard/stats', authenticateToken, dashboardController.getDashboardStats);

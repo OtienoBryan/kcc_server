@@ -17,12 +17,14 @@ exports.getSalesDashboardData = async (req, res) => {
     // Execute all queries in parallel for better performance
     const [
       salesRepsResult,
+      teamLeadersResult,
       ordersResult,
       leavesResult,
       managersResult,
       targetsResult,
       planogramComplianceResult,
       checkedInRepsResult,
+      checkedInTeamLeadersResult,
       currentMonthOutletsVisitedResult
     ] = await Promise.allSettled([
       // 1. Get all sales reps with route and region info
@@ -31,11 +33,18 @@ exports.getSalesDashboardData = async (req, res) => {
                r.region as region_name
         FROM \`SalesRep\` sr
         LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
-        WHERE sr.status = 1
+        WHERE sr.status = 1 AND LOWER(TRIM(sr.role)) = 'sales rep'
         ORDER BY sr.name
       `),
 
-      // 2. Get all orders with necessary data
+      // 2. Get all active team leaders
+      db.query(`
+        SELECT sr.id
+        FROM \`SalesRep\` sr
+        WHERE sr.status = 1 AND LOWER(TRIM(sr.role)) = 'team leader'
+      `),
+
+      // 3. Get all orders with necessary data
       db.query(`
         SELECT 
           so.id,
@@ -51,28 +60,28 @@ exports.getSalesDashboardData = async (req, res) => {
         ORDER BY so.order_date DESC
       `),
 
-      // 3. Get pending leaves count only
+      // 4. Get pending leaves count only
       db.query(`
         SELECT COUNT(*) as pending_count
         FROM leaves
         WHERE status = '0' OR status = 0
       `),
 
-      // 4. Get managers
+      // 5. Get managers
       db.query(`
         SELECT id, name, email, phoneNumber, country, region, managerTypeId
         FROM managers
         ORDER BY name
       `),
 
-      // 5. Get all targets data
+      // 6. Get all targets data
       Promise.all([
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM distributors_targets'),
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM key_account_targets'),
         db.query('SELECT sales_rep_id, vapes_target, pouches_target FROM retail_targets')
       ]),
 
-      // 6. Get planogram compliance data aggregated by month
+      // 7. Get planogram compliance data aggregated by month
       db.query(`
         SELECT 
           DATE_FORMAT(pr.createdAt, '%Y-%m') as month_key,
@@ -95,17 +104,29 @@ exports.getSalesDashboardData = async (req, res) => {
         LIMIT 12
       `),
 
-      // 7. Get count of sales reps who have checked in today
+      // 8. Get count of sales reps who have checked in today
       db.query(`
         SELECT COUNT(DISTINCT jp.userId) as checked_in_count
         FROM \`JourneyPlan\` jp
         INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
         WHERE sr.status = 1
+          AND LOWER(TRIM(sr.role)) = 'sales rep'
           AND jp.checkInTime IS NOT NULL
           AND DATE(jp.checkInTime) = CURDATE()
       `),
 
-      // 8. Get unique outlets visited in the current month
+      // 9. Get count of team leaders who have checked in today
+      db.query(`
+        SELECT COUNT(DISTINCT sr.id) as checked_in_team_leaders
+        FROM JourneyPlan jp
+        INNER JOIN SalesRep sr ON jp.userId = sr.id
+        WHERE sr.status = 1
+          AND LOWER(TRIM(sr.role)) = 'team leader'
+          AND jp.checkInTime IS NOT NULL
+          AND DATE(jp.checkInTime) = CURDATE()
+      `),
+
+      // 10. Get unique outlets visited in the current month
       db.query(`
         SELECT COUNT(DISTINCT jp.clientId) as outlets_visited_count
         FROM JourneyPlan jp
@@ -125,6 +146,8 @@ exports.getSalesDashboardData = async (req, res) => {
         activeReps: 0,
         checkedInReps: 0,
         totalActiveReps: 0,
+        activeTeamLeaders: 0,
+        checkedInTeamLeaders: 0,
         avgPerformance: 0
       },
       monthlyData: [],
@@ -176,6 +199,16 @@ exports.getSalesDashboardData = async (req, res) => {
       dashboardData.stats.totalActiveReps = 0;
     }
 
+    // Process team leaders count
+    if (teamLeadersResult.status === 'fulfilled') {
+      const leaders = teamLeadersResult.value[0] || [];
+      dashboardData.stats.activeTeamLeaders = Array.isArray(leaders) ? leaders.length : 0;
+      console.log('[getSalesDashboardData] Active team leaders:', dashboardData.stats.activeTeamLeaders);
+    } else {
+      dashboardData.stats.activeTeamLeaders = 0;
+      console.error('[getSalesDashboardData] Team leaders query failed:', teamLeadersResult.reason);
+    }
+
     // Process checked-in sales reps count
     if (checkedInRepsResult.status === 'fulfilled') {
       const checkedInData = checkedInRepsResult.value[0] || [];
@@ -187,6 +220,16 @@ exports.getSalesDashboardData = async (req, res) => {
       dashboardData.stats.checkedInReps = 0;
       dashboardData.stats.activeReps = 0;
       console.error('[getSalesDashboardData] Checked-in query failed:', checkedInRepsResult.reason);
+    }
+
+    // Process checked-in team leaders count
+    if (checkedInTeamLeadersResult.status === 'fulfilled') {
+      const data = checkedInTeamLeadersResult.value[0] || [];
+      dashboardData.stats.checkedInTeamLeaders = data[0]?.checked_in_team_leaders || 0;
+      console.log('[getSalesDashboardData] Checked-in team leaders today:', dashboardData.stats.checkedInTeamLeaders);
+    } else {
+      dashboardData.stats.checkedInTeamLeaders = 0;
+      console.error('[getSalesDashboardData] Checked-in team leaders query failed:', checkedInTeamLeadersResult.reason);
     }
     
     // Ensure we have valid numbers even if queries failed
@@ -858,7 +901,7 @@ exports.getTeamLeaderDashboardData = async (req, res) => {
  */
 exports.getCheckedInSalesReps = async (req, res) => {
   try {
-    const { team_leader_id, region } = req.query;
+    const { team_leader_id, region, role } = req.query;
     
     // Build WHERE conditions
     let whereConditions = [
@@ -867,6 +910,14 @@ exports.getCheckedInSalesReps = async (req, res) => {
       'DATE(jp.checkInTime) = CURDATE()'
     ];
     let queryParams = [];
+
+    // Filter by role (default to sales rep / FMRs)
+    if (role === 'leader') {
+      whereConditions.push("LOWER(TRIM(sr.role)) = 'team leader'");
+    } else {
+      // default and any other value -> FMRs
+      whereConditions.push("LOWER(TRIM(sr.role)) = 'sales rep'");
+    }
     
     // Filter by team leader if provided (for team leader role)
     if (team_leader_id) {
@@ -892,7 +943,9 @@ exports.getCheckedInSalesReps = async (req, res) => {
         r.name as route_name,
         sr.region as region_name,
         MAX(jp.checkInTime) as checkInTime,
-        MAX(jp.checkoutTime) as checkoutTime
+        MAX(jp.checkoutTime) as checkoutTime,
+        MAX(jp.latitude) as latitude,
+        MAX(jp.longitude) as longitude
       FROM \`JourneyPlan\` jp
       INNER JOIN \`SalesRep\` sr ON jp.userId = sr.id
       LEFT JOIN \`routes\` r ON sr.route_id_update = r.id
@@ -912,7 +965,9 @@ exports.getCheckedInSalesReps = async (req, res) => {
         route_name: r.route_name,
         region_name: r.region_name,
         checkInTime: r.checkInTime,
-        checkoutTime: r.checkoutTime
+        checkoutTime: r.checkoutTime,
+        latitude: r.latitude !== null && r.latitude !== undefined ? Number(r.latitude) : null,
+        longitude: r.longitude !== null && r.longitude !== undefined ? Number(r.longitude) : null
       }))
     });
 

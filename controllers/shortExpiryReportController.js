@@ -10,13 +10,17 @@ exports.getAllShortExpiryReports = async (req, res) => {
     let sql = `
       SELECT se.id, se.productId, se.product_name, se.quantity, se.batch_number, 
              se.expiry_date, se.createdAt, se.rep_id, se.appoint_id, se.outlet_id,
+             se.comment,
              c.name AS outletName,
              r.name AS regionName,
-             sr.name AS salesRepName
+             sr.name AS salesRepName,
+             s.sku AS productSku
       FROM short_expiry se
       LEFT JOIN Clients c ON se.outlet_id = c.id
       LEFT JOIN Regions r ON c.region_id = r.id
       LEFT JOIN SalesRep sr ON se.rep_id = sr.id
+      LEFT JOIN products p ON se.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
     `;
     let countSql = `
       SELECT COUNT(*) as total
@@ -24,6 +28,8 @@ exports.getAllShortExpiryReports = async (req, res) => {
       LEFT JOIN Clients c ON se.outlet_id = c.id
       LEFT JOIN Regions r ON c.region_id = r.id
       LEFT JOIN SalesRep sr ON se.rep_id = sr.id
+      LEFT JOIN products p ON se.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
     `;
     const params = [];
     const countParams = [];
@@ -148,13 +154,17 @@ exports.exportShortExpiryReportsCSV = async (req, res) => {
     let sql = `
       SELECT se.id, se.productId, se.product_name, se.quantity, se.batch_number, 
              se.expiry_date, se.createdAt, se.rep_id, se.appoint_id, se.outlet_id,
+             se.comment,
              c.name AS outletName,
              r.name AS regionName,
-             sr.name AS salesRepName
+             sr.name AS salesRepName,
+             s.sku AS productSku
       FROM short_expiry se
       LEFT JOIN Clients c ON se.outlet_id = c.id
       LEFT JOIN Regions r ON c.region_id = r.id
       LEFT JOIN SalesRep sr ON se.rep_id = sr.id
+      LEFT JOIN products p ON se.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
     `;
     const params = [];
     let whereConditions = [];
