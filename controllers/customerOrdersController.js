@@ -81,13 +81,10 @@ const getCustomerOrdersData = async (req, res) => {
     }
 
     // Role-based access filtering
-    // - sales: only own orders
+    // - sales: see all orders (no additional restriction)
     // - leader/team_leader: orders belonging to reps under this leader
     // - other roles: see all (subject to explicit filters above)
-    if (currentUserRole === 'sales' && currentUserId) {
-      whereConditions.push('so.created_by = ?');
-      queryParams.push(currentUserId);
-    } else if ((currentUserRole === 'leader' || currentUserRole === 'team_leader') && currentUserId) {
+    if ((currentUserRole === 'leader' || currentUserRole === 'team_leader') && currentUserId) {
       whereConditions.push('sr.leader_id = ?');
       queryParams.push(currentUserId);
     }
