@@ -3,7 +3,7 @@ const db = require('../database/db');
 exports.getAllAvailabilityReports = async (req, res) => {
   try {
     console.log('Availability reports route hit!');
-    const { startDate, endDate, currentDate, page = 1, limit = 10, country, salesRep, search } = req.query;
+    const { startDate, endDate, currentDate, page = 1, limit = 10, country, salesRep, productSku, search } = req.query;
     const isViewAll = parseInt(limit) === -1;
     const offset = isViewAll ? 0 : (parseInt(page) - 1) * parseInt(limit);
     
@@ -22,6 +22,7 @@ exports.getAllAvailabilityReports = async (req, res) => {
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON ar.userId = u.id
       LEFT JOIN products p ON ar.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
       LEFT JOIN Category cat ON p.category_id = cat.id
     `;
     let countSql = `
@@ -31,6 +32,7 @@ exports.getAllAvailabilityReports = async (req, res) => {
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON ar.userId = u.id
       LEFT JOIN products p ON ar.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
       LEFT JOIN Category cat ON p.category_id = cat.id
     `;
     const params = [];
@@ -72,6 +74,12 @@ exports.getAllAvailabilityReports = async (req, res) => {
       whereConditions.push(`u.name = ?`);
       params.push(salesRep);
       countParams.push(salesRep);
+    }
+    if (productSku && productSku.trim()) {
+      whereConditions.push(`s.sku LIKE ?`);
+      const skuSearch = `%${productSku.trim()}%`;
+      params.push(skuSearch);
+      countParams.push(skuSearch);
     }
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
@@ -124,7 +132,7 @@ exports.getAllAvailabilityReports = async (req, res) => {
 exports.exportAvailabilityReportsCSV = async (req, res) => {
   try {
     console.log('Availability reports CSV export route hit!');
-    const { startDate, endDate, currentDate, country, salesRep, search } = req.query;
+    const { startDate, endDate, currentDate, country, salesRep, productSku, search } = req.query;
     // Fetch ALL matching rows (no pagination) with category info - same base as UI
     // Primary match: Use productId to get the exact product and its category
     let sql = `
@@ -139,6 +147,7 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON ar.userId = u.id
       LEFT JOIN products p ON ar.productId = p.id
+      LEFT JOIN skus s ON p.sku_id = s.id
       LEFT JOIN Category cat ON p.category_id = cat.id
     `;
     const params = [];
@@ -163,6 +172,10 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
     if (salesRep && salesRep !== 'all') {
       whereConditions.push(`u.name = ?`);
       params.push(salesRep);
+    }
+    if (productSku && productSku.trim()) {
+      whereConditions.push(`s.sku LIKE ?`);
+      params.push(`%${productSku.trim()}%`);
     }
     if (search && search.trim()) {
       const searchTerm = `%${search.trim()}%`;
@@ -300,3 +313,33 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 }; 
+
+exports.getAvailabilitySkus = async (req, res) => {
+  try {
+    let sql = `
+      SELECT DISTINCT s.sku
+      FROM ProductReport ar
+      LEFT JOIN SalesRep u ON ar.userId = u.id
+      INNER JOIN products p ON ar.productId = p.id
+      INNER JOIN skus s ON p.sku_id = s.id
+      WHERE s.is_active = 1
+    `;
+
+    const params = [];
+
+    // Filter by leader_id if user role is leader
+    if (req.user && req.user.role && req.user.role.toLowerCase() === 'leader') {
+      sql += ` AND u.leader_id = ?`;
+      params.push(req.user.id);
+    }
+
+    sql += ` ORDER BY s.sku ASC`;
+
+    const [results] = await db.query(sql, params);
+    const skus = results.map((row) => row.sku);
+    res.json(skus);
+  } catch (err) {
+    console.error('Error fetching availability skus:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

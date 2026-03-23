@@ -8,5 +8,6 @@ router.use(authenticateToken);
 
 router.get('/', availabilityReportController.getAllAvailabilityReports);
 router.get('/export', availabilityReportController.exportAvailabilityReportsCSV);
+router.get('/skus', availabilityReportController.getAvailabilitySkus);
 
 module.exports = router; 
