@@ -26,6 +26,8 @@ const getCustomerOrdersData = async (req, res) => {
   
   try {
     const { page = 1, limit = 10, status, rider_id, start_date, end_date, search, client_id, outlet_account_id } = req.query;
+    const currentUserId = req.user?.id;
+    const currentUserRole = req.user?.role;
     
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
@@ -63,9 +65,9 @@ const getCustomerOrdersData = async (req, res) => {
     }
     
     if (search) {
-      whereConditions.push('(so.so_number LIKE ? OR c.name LIKE ?)');
+      whereConditions.push('(so.so_number LIKE ? OR c.name LIKE ? OR so.lpo_number LIKE ?)');
       const searchPattern = `%${search}%`;
-      queryParams.push(searchPattern, searchPattern);
+      queryParams.push(searchPattern, searchPattern, searchPattern);
     }
     
     if (client_id) {
@@ -76,6 +78,18 @@ const getCustomerOrdersData = async (req, res) => {
     if (outlet_account_id) {
       whereConditions.push('c.outlet_account = ?');
       queryParams.push(parseInt(outlet_account_id));
+    }
+
+    // Role-based access filtering
+    // - sales: only own orders
+    // - leader/team_leader: orders belonging to reps under this leader
+    // - other roles: see all (subject to explicit filters above)
+    if (currentUserRole === 'sales' && currentUserId) {
+      whereConditions.push('so.created_by = ?');
+      queryParams.push(currentUserId);
+    } else if ((currentUserRole === 'leader' || currentUserRole === 'team_leader') && currentUserId) {
+      whereConditions.push('sr.leader_id = ?');
+      queryParams.push(currentUserId);
     }
     
     const whereClause = whereConditions.length > 0 
@@ -98,6 +112,7 @@ const getCustomerOrdersData = async (req, res) => {
           SELECT COUNT(DISTINCT so.id) as total
           FROM sales_orders so
           LEFT JOIN Clients c ON so.client_id = c.id
+          LEFT JOIN SalesRep sr ON so.salesrep = sr.id
           ${whereClause}
         `, queryParams),
         
@@ -110,14 +125,23 @@ const getCustomerOrdersData = async (req, res) => {
         // Count orders by status for filter badges
         db.query(`
           SELECT 
-            my_status,
+            so.my_status,
             COUNT(*) as count
-          FROM sales_orders
-          GROUP BY my_status
-        `),
+          FROM sales_orders so
+          LEFT JOIN Clients c ON so.client_id = c.id
+          LEFT JOIN SalesRep sr ON so.salesrep = sr.id
+          ${whereClause}
+          GROUP BY so.my_status
+        `, queryParams),
         
         // Get total count for 'all' status
-        db.query('SELECT COUNT(*) as total FROM sales_orders')
+        db.query(`
+          SELECT COUNT(DISTINCT so.id) as total
+          FROM sales_orders so
+          LEFT JOIN Clients c ON so.client_id = c.id
+          LEFT JOIN SalesRep sr ON so.salesrep = sr.id
+          ${whereClause}
+        `, queryParams)
       ]);
     } catch (queryError) {
       console.error('Error in parallel queries:', queryError);
@@ -156,9 +180,12 @@ const getCustomerOrdersData = async (req, res) => {
       SELECT 
         so.id,
         so.so_number,
+        so.lpo_number,
         so.client_id,
         so.order_date,
         so.expected_delivery_date,
+        so.subtotal,
+        so.tax_amount,
         so.total_amount,
         so.status,
         so.my_status,

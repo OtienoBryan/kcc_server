@@ -9,7 +9,7 @@ exports.getAllCompetitorActivityReports = async (req, res) => {
     
     let sql = `
       SELECT ca.id, ca.outlet, ca.outlet_id, ca.merchandiser, ca.competing_product, 
-             ca.mechanism, ca.product_id, ca.zuri_product, ca.date, ca.reportId,
+             ca.mechanism, ca.product_id, ca.zuri_product, ca.image_name, ca.date, ca.reportId,
              ca.competitor_company,
              c.name AS outletName,
              sr.name AS merchandiserName
@@ -135,7 +135,7 @@ exports.exportCompetitorActivityReportsCSV = async (req, res) => {
     
     let sql = `
       SELECT ca.id, ca.outlet, ca.outlet_id, ca.merchandiser, ca.competing_product, 
-             ca.mechanism, ca.product_id, ca.zuri_product, ca.date, ca.reportId,
+             ca.mechanism, ca.product_id, ca.zuri_product, ca.image_name, ca.date, ca.reportId,
              ca.competitor_company,
              c.name AS outletName,
              sr.name AS merchandiserName

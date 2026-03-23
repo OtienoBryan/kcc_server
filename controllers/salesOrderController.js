@@ -201,6 +201,7 @@ const salesOrderController = {
           c.contact,
           c.email,
           c.address,
+          c.route_name_update,
           c.tax_pin,
           u.full_name as created_by_name,
           sr.name as salesrep,
@@ -249,6 +250,7 @@ const salesOrderController = {
         contact: salesOrder.contact,
         email: salesOrder.email,
         address: salesOrder.address,
+        route_name_update: salesOrder.route_name_update,
         tax_pin: salesOrder.tax_pin
       };
       res.json({ success: true, data: salesOrder });

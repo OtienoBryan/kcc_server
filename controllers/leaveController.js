@@ -23,11 +23,15 @@ exports.getAllSalesRepLeaves = async (req, res) => {
       lr.reason,
       lr.attachment_url as attachment,
       CAST(lr.status AS UNSIGNED) as status,
+      lr.team_leader_approved_by as teamLeaderApprovedById,
+      COALESCE(tl.username, tl.email) as teamLeaderApprovedBy,
+      lr.team_leader_approved_at as teamLeaderApprovedAt,
       lr.created_at as createdAt,
       lr.updated_at as updatedAt
     FROM leave_requests lr
     LEFT JOIN SalesRep sr ON lr.employee_id = sr.id
     LEFT JOIN leave_types lt ON lr.leave_type_id = lt.id
+    LEFT JOIN users tl ON lr.team_leader_approved_by = tl.id
     ${whereClause}
     ORDER BY lr.id DESC
   `;
@@ -69,11 +73,13 @@ exports.updateLeaveStatus = async (req, res) => {
     statusValue = 0; // pending
   } else if (status === 1 || status === '1') {
     statusValue = 1; // approved
+  } else if (status === 7 || status === '7') {
+    statusValue = 7; // approved by team leader
   } else if (status === 2 || status === '2') {
     statusValue = 2; // declined/rejected
   } else {
     console.log('Invalid status value:', status);
-    return res.status(400).json({ error: 'Invalid status value. Must be 0 (pending), 1 (approved), or 2 (declined)' });
+    return res.status(400).json({ error: 'Invalid status value. Must be 0 (pending), 1 (approved), 2 (declined), or 7 (team leader approved)' });
   }
   
   console.log('Status value (integer):', statusValue, 'Type:', typeof statusValue);
@@ -101,11 +107,19 @@ exports.updateLeaveStatus = async (req, res) => {
     }
     
     // Execute the update query
-    const updateQuery = 'UPDATE leave_requests SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+    const updateQuery = `
+      UPDATE leave_requests 
+      SET 
+        status = ?,
+        team_leader_approved_by = CASE WHEN ? = 7 THEN ? ELSE NULL END,
+        team_leader_approved_at = CASE WHEN ? = 7 THEN CURRENT_TIMESTAMP ELSE NULL END,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `;
     console.log('Executing UPDATE query:', updateQuery);
-    console.log('Parameters:', [statusValue, leaveId]);
+    console.log('Parameters:', [statusValue, statusValue, req.user?.id || null, statusValue, leaveId]);
     
-    const [result] = await db.query(updateQuery, [statusValue, leaveId]);
+    const [result] = await db.query(updateQuery, [statusValue, statusValue, req.user?.id || null, statusValue, leaveId]);
     
     console.log('Update result - affectedRows:', result?.affectedRows);
     console.log('Update result - changedRows:', result?.changedRows);

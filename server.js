@@ -20,7 +20,7 @@ process.env.TZ = 'UTC';
 process.env.NODE_TZ = 'UTC';
 
 // Try to require database and other modules, but don't crash if they fail
-let db, staffController, roleController, multer, upload, uploadController, teamController, clientController, branchController, serviceChargeController, journeyPlanController, payrollRoutes, financialRoutes, staffRoutes, chatRoutes, clientRoutes, salesRoutes, managerRoutes, noticeRoutes, salesRepLeaveRoutes, calendarTaskRoutes, userRoutes, loginHistoryRoutes, journeyPlanRoutes, riderRoutes, myVisibilityReportRoutes, feedbackReportRoutes, availabilityReportRoutes, shortExpiryReportRoutes, competitorActivityReportRoutes, priceComplianceReportRoutes, leaveRequestRoutes, supplierRoutes, receiptRoutes, myAssetsRoutes, faultyProductsRoutes, storeRoutes, routesRoutes, upliftSaleRoutes, dashboardRoutes, customerOrdersRoutes, categoryRoutes, brandRoutes, outletAccountRoutes, brandSosTargetRoutes, planogramComplianceRoutes, assetPurchaseOrderRoutes, departmentExpenseRoutes, auditTrailRoutes, sosReportRoutes;
+let db, staffController, roleController, multer, upload, uploadController, teamController, clientController, branchController, serviceChargeController, journeyPlanController, payrollRoutes, financialRoutes, staffRoutes, chatRoutes, clientRoutes, salesRoutes, managerRoutes, noticeRoutes, salesRepLeaveRoutes, calendarTaskRoutes, userRoutes, loginHistoryRoutes, journeyPlanRoutes, riderRoutes, myVisibilityReportRoutes, feedbackReportRoutes, availabilityReportRoutes, shortExpiryReportRoutes, competitorActivityReportRoutes, priceComplianceReportRoutes, promotionsReportRoutes, leaveRequestRoutes, supplierRoutes, receiptRoutes, myAssetsRoutes, faultyProductsRoutes, storeRoutes, routesRoutes, upliftSaleRoutes, dashboardRoutes, customerOrdersRoutes, categoryRoutes, brandRoutes, outletAccountRoutes, brandSosTargetRoutes, planogramComplianceRoutes, assetPurchaseOrderRoutes, departmentExpenseRoutes, auditTrailRoutes, sosReportRoutes;
 
 try {
   db = require('./database/db');
@@ -56,6 +56,7 @@ try {
   shortExpiryReportRoutes = require('./routes/shortExpiryReportRoutes');
   competitorActivityReportRoutes = require('./routes/competitorActivityReportRoutes');
   priceComplianceReportRoutes = require('./routes/priceComplianceReportRoutes');
+  promotionsReportRoutes = require('./routes/promotionsReportRoutes');
   leaveRequestRoutes = require('./routes/leaveRequestRoutes');
   supplierRoutes = require('./routes/supplierRoutes');
   receiptRoutes = require('./routes/receiptRoutes');
@@ -187,6 +188,9 @@ if (competitorActivityReportRoutes) {
 }
 if (priceComplianceReportRoutes) {
   app.use('/api/price-compliance-reports', priceComplianceReportRoutes);
+}
+if (promotionsReportRoutes) {
+  app.use('/api/promotions-reports', promotionsReportRoutes);
 }
 if (leaveRequestRoutes) {
   app.use('/api/leave-requests', leaveRequestRoutes);
