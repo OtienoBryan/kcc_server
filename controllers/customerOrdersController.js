@@ -178,6 +178,7 @@ const getCustomerOrdersData = async (req, res) => {
         so.id,
         so.so_number,
         so.lpo_number,
+        so.lpo_value,
         so.client_id,
         so.order_date,
         so.expected_delivery_date,
