@@ -8,11 +8,17 @@ exports.getAllFeedbackReports = async (req, res) => {
     const offset = isViewAll ? 0 : (parseInt(page) - 1) * parseInt(limit);
     let sql = `
       SELECT fr.id, fr.reportId, fr.comment, fr.createdAt,
-             c.name AS outlet, co.name AS country, u.name AS salesRep
+             c.name AS outlet, co.name AS country, u.name AS salesRep,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName
       FROM FeedbackReport fr
       LEFT JOIN Clients c ON fr.clientId = c.id
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
     let countSql = `
       SELECT COUNT(*) as total
@@ -100,11 +106,17 @@ exports.exportFeedbackReportsCSV = async (req, res) => {
     const { startDate, endDate, currentDate, country, salesRep, search } = req.query;
     let sql = `
       SELECT fr.id, fr.reportId, fr.comment, fr.createdAt,
-             c.name AS outlet, co.name AS country, u.name AS salesRep
+             c.name AS outlet, co.name AS country, u.name AS salesRep,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName
       FROM FeedbackReport fr
       LEFT JOIN Clients c ON fr.clientId = c.id
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON fr.userId = u.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
     const params = [];
     let whereConditions = [];
@@ -205,12 +217,15 @@ exports.exportFeedbackReportsCSV = async (req, res) => {
       ['Filter Search:', search && search.trim() ? search.trim() : 'No Search'],
       ['Total Reports:', reportCount.toString()],
       [''],
-      ['Outlet', 'Country', 'Sales Rep', 'Comment', 'Date']
+      ['Outlet', 'Region', 'Outlet Type', 'Outlet Account', 'Country', 'Sales Rep', 'Comment', 'Date']
     ];
     
     // Map data to match table structure exactly
     const csvData = results.map(row => [
       row.outlet || 'N/A',
+      row.regionName || 'N/A',
+      row.outletTypeName || 'N/A',
+      row.outletAccountName || 'N/A',
       row.country || 'N/A',
       row.salesRep || 'N/A',
       row.comment || 'N/A',

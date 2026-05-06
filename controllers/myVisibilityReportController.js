@@ -96,11 +96,17 @@ exports.getAllMyVisibilityReports = async (req, res) => {
         c.name as outletName,
         c.name as companyName,
         co.name as country,
-        sr.name as salesRep
+        sr.name as salesRep,
+        reg.name as regionName,
+        oc.name as outletTypeName,
+        oa.name as outletAccountName
       FROM VisibilityReport vr
       LEFT JOIN Clients c ON vr.clientId = c.id
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep sr ON vr.userId = sr.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       ${whereClause}
       ORDER BY vr.createdAt DESC
       LIMIT ? OFFSET ?

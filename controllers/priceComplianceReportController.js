@@ -11,10 +11,16 @@ exports.getAllPriceComplianceReports = async (req, res) => {
       SELECT pc.id, pc.rep_id, pc.outlet_id, pc.outlet_name, pc.product_id, pc.product_name,
              pc.rrp, pc.shelf_price, pc.comment, pc.price_correct, pc.promotion, pc.date, pc.appoint_id,
              c.name AS outletName,
-             sr.name AS salesRepName
+             sr.name AS salesRepName,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName
       FROM price_compliance pc
       LEFT JOIN Clients c ON pc.outlet_id = c.id
       LEFT JOIN SalesRep sr ON pc.rep_id = sr.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
     let countSql = `
       SELECT COUNT(*) as total
@@ -147,10 +153,16 @@ exports.exportPriceComplianceReportsCSV = async (req, res) => {
       SELECT pc.id, pc.rep_id, pc.outlet_id, pc.outlet_name, pc.product_id, pc.product_name,
              pc.rrp, pc.shelf_price, pc.comment, pc.price_correct, pc.promotion, pc.date, pc.appoint_id,
              c.name AS outletName,
-             sr.name AS salesRepName
+             sr.name AS salesRepName,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName
       FROM price_compliance pc
       LEFT JOIN Clients c ON pc.outlet_id = c.id
       LEFT JOIN SalesRep sr ON pc.rep_id = sr.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
     const params = [];
     let whereConditions = [];
@@ -225,13 +237,16 @@ exports.exportPriceComplianceReportsCSV = async (req, res) => {
     const [results] = await db.query(sql, params);
     
     // Convert to CSV
-    const headers = ['ID', 'Outlet', 'Sales Rep', 'Product', 'RRP', 'Shelf Price', 'Price Correct', 'Promotion', 'Comment', 'Date'];
+    const headers = ['ID', 'Outlet', 'Region', 'Outlet Type', 'Outlet Account', 'Sales Rep', 'Product', 'RRP', 'Shelf Price', 'Price Correct', 'Promotion', 'Comment', 'Date'];
     const csvRows = [headers.join(',')];
     
     results.forEach(row => {
       const values = [
         row.id || '',
         `"${(row.outletName || row.outlet_name || '').replace(/"/g, '""')}"`,
+        `"${(row.regionName || '').replace(/"/g, '""')}"`,
+        `"${(row.outletTypeName || '').replace(/"/g, '""')}"`,
+        `"${(row.outletAccountName || '').replace(/"/g, '""')}"`,
         `"${(row.salesRepName || '').replace(/"/g, '""')}"`,
         `"${(row.product_name || '').replace(/"/g, '""')}"`,
         row.rrp || '',

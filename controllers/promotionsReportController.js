@@ -22,7 +22,10 @@ exports.getAllPromotionsReports = async (req, res) => {
              mp.product, mp.activation_type, mp.qty_samples_given, mp.qty_before, mp.qty_after,
              mp.comment, mp.created_at,
              c.name AS outletName,
-             sr.name AS salesRepName
+             sr.name AS salesRepName,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName
       FROM my_promotions mp
       LEFT JOIN Clients c ON (
         CAST(c.id AS CHAR) = TRIM(mp.outlet_id)
@@ -30,6 +33,9 @@ exports.getAllPromotionsReports = async (req, res) => {
         OR c.name = TRIM(mp.outlet_id)
       )
       LEFT JOIN SalesRep sr ON CAST(sr.id AS CHAR) = mp.user_id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
 
     let countSql = `

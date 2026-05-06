@@ -202,12 +202,18 @@ const getCustomerOrdersData = async (req, res) => {
         u.username as created_by_name,
         u.email as salesrep_email,
         r.name as rider_name,
-        r.contact as rider_contact
+        r.contact as rider_contact,
+        reg.name as region_name,
+        oc.name as outlet_type_name,
+        oa.name as outlet_account_name
       FROM sales_orders so
       LEFT JOIN Clients c ON so.client_id = c.id
       LEFT JOIN SalesRep sr ON so.salesrep = sr.id
       LEFT JOIN users u ON so.created_by = u.id
       LEFT JOIN Riders r ON so.rider_id = r.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       ${whereClause}
       ORDER BY so.created_at DESC
       LIMIT ? OFFSET ?

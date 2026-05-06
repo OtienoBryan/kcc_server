@@ -38,10 +38,14 @@ exports.getAllSosReports = async (req, res) => {
         s.date,
         c.name AS outletName,
         sr.name AS repName,
+        reg.name AS regionName,
+        oc.name AS outletTypeName,
         oa.name AS outletAccountName
       FROM sos_report s
       LEFT JOIN Clients c ON s.outlet_id = c.id
       LEFT JOIN SalesRep sr ON s.rep_id = sr.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
       LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
 
@@ -208,10 +212,14 @@ exports.exportSosReportsCSV = async (req, res) => {
         s.date,
         c.name AS outletName,
         sr.name AS repName,
+        reg.name AS regionName,
+        oc.name AS outletTypeName,
         oa.name AS outletAccountName
       FROM sos_report s
       LEFT JOIN Clients c ON s.outlet_id = c.id
       LEFT JOIN SalesRep sr ON s.rep_id = sr.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
       LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
     `;
 
@@ -293,6 +301,8 @@ exports.exportSosReportsCSV = async (req, res) => {
     const headers = [
       'ID',
       'Outlet',
+      'Region',
+      'Outlet Type',
       'Outlet Account',
       'Rep',
       'Brand',
@@ -323,6 +333,8 @@ exports.exportSosReportsCSV = async (req, res) => {
       const values = [
         row.id || '',
         `"${(row.outletName || '').replace(/"/g, '""')}"`,
+        `"${(row.regionName || '').replace(/"/g, '""')}"`,
+        `"${(row.outletTypeName || '').replace(/"/g, '""')}"`,
         `"${(row.outletAccountName || '').replace(/"/g, '""')}"`,
         `"${(row.repName || '').replace(/"/g, '""')}"`,
         `"${(row.brand_name || '').replace(/"/g, '""')}"`,

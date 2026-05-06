@@ -13,6 +13,9 @@ exports.getAllAvailabilityReports = async (req, res) => {
     let sql = `
       SELECT ar.id, ar.reportId, ar.comment, ar.createdAt, ar.clientId, ar.userId, ar.productId,
              c.name AS clientName, co.name AS countryName, u.name AS salesRepName,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName,
              ar.ProductName AS productName, ar.quantity,
              cat.id AS categoryId, 
              cat.name AS categoryName, 
@@ -21,6 +24,9 @@ exports.getAllAvailabilityReports = async (req, res) => {
       LEFT JOIN Clients c ON ar.clientId = c.id
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON ar.userId = u.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       LEFT JOIN products p ON ar.productId = p.id
       LEFT JOIN skus s ON p.sku_id = s.id
       LEFT JOIN Category cat ON p.category_id = cat.id
@@ -138,6 +144,9 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
     let sql = `
       SELECT ar.id, ar.reportId, ar.comment, ar.createdAt, ar.clientId, ar.userId, ar.productId,
              c.name AS clientName, co.name AS countryName, u.name AS salesRepName,
+             reg.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName,
              ar.ProductName AS productName, ar.quantity,
              cat.id AS categoryId, 
              cat.name AS categoryName,
@@ -146,6 +155,9 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
       LEFT JOIN Clients c ON ar.clientId = c.id
       LEFT JOIN Country co ON c.countryId = co.id
       LEFT JOIN SalesRep u ON ar.userId = u.id
+      LEFT JOIN Regions reg ON c.region_id = reg.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       LEFT JOIN products p ON ar.productId = p.id
       LEFT JOIN skus s ON p.sku_id = s.id
       LEFT JOIN Category cat ON p.category_id = cat.id
@@ -228,6 +240,9 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
           clientName: clientNameKey,
           reportDate: dateKey,
           salesReps: new Set(),
+          regionName: (r.regionName || '').trim(),
+          outletTypeName: (r.outletTypeName || '').trim(),
+          outletAccountName: (r.outletAccountName || '').trim(),
           productQuantities: new Map()
         });
       }
@@ -255,8 +270,8 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
       return s;
     };
 
-    const categoryHeader = ['Outlet', 'Sales Rep', 'Date', ...products.map(p => (productMap.get(p)?.categoryName || 'Uncategorized'))];
-    const productHeader = ['Outlet', 'Sales Rep', 'Date', ...products];
+    const categoryHeader = ['Outlet', 'Region', 'Outlet Type', 'Outlet Account', 'Sales Rep', 'Date', ...products.map(p => (productMap.get(p)?.categoryName || 'Uncategorized'))];
+    const productHeader = ['Outlet', 'Region', 'Outlet Type', 'Outlet Account', 'Sales Rep', 'Date', ...products];
 
     const lines = [];
     // Metadata/title block
@@ -291,7 +306,14 @@ exports.exportAvailabilityReportsCSV = async (req, res) => {
 
     for (const outlet of outlets) {
       const salesRepStr = Array.from(outlet.salesReps || []).join(' / ');
-      const row = [outlet.clientName, salesRepStr, outlet.reportDate];
+      const row = [
+        outlet.clientName,
+        outlet.regionName || '',
+        outlet.outletTypeName || '',
+        outlet.outletAccountName || '',
+        salesRepStr,
+        outlet.reportDate
+      ];
       for (const product of products) {
         const cell = outlet.productQuantities.get(product);
         row.push(cell ? cell.quantity : 0);

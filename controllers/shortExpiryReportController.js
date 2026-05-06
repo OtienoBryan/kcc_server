@@ -13,11 +13,15 @@ exports.getAllShortExpiryReports = async (req, res) => {
              se.comment,
              c.name AS outletName,
              r.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName,
              sr.name AS salesRepName,
              s.sku AS productSku
       FROM short_expiry se
       LEFT JOIN Clients c ON se.outlet_id = c.id
       LEFT JOIN Regions r ON c.region_id = r.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       LEFT JOIN SalesRep sr ON se.rep_id = sr.id
       LEFT JOIN products p ON se.productId = p.id
       LEFT JOIN skus s ON p.sku_id = s.id
@@ -157,11 +161,15 @@ exports.exportShortExpiryReportsCSV = async (req, res) => {
              se.comment,
              c.name AS outletName,
              r.name AS regionName,
+             oc.name AS outletTypeName,
+             oa.name AS outletAccountName,
              sr.name AS salesRepName,
              s.sku AS productSku
       FROM short_expiry se
       LEFT JOIN Clients c ON se.outlet_id = c.id
       LEFT JOIN Regions r ON c.region_id = r.id
+      LEFT JOIN outlet_categories oc ON c.client_type = oc.id
+      LEFT JOIN outlet_accounts oa ON c.outlet_account = oa.id
       LEFT JOIN SalesRep sr ON se.rep_id = sr.id
       LEFT JOIN products p ON se.productId = p.id
       LEFT JOIN skus s ON p.sku_id = s.id
@@ -242,7 +250,7 @@ exports.exportShortExpiryReportsCSV = async (req, res) => {
     const [results] = await db.query(sql, params);
     
     // Convert to CSV
-    const headers = ['ID', 'Product ID', 'Product Name', 'Quantity', 'Batch Number', 'Expiry Date', 'Created At', 'Outlet', 'Region', 'Sales Rep'];
+    const headers = ['ID', 'Product ID', 'Product Name', 'Quantity', 'Batch Number', 'Expiry Date', 'Created At', 'Outlet', 'Region', 'Outlet Type', 'Outlet Account', 'Sales Rep'];
     const csvRows = [headers.join(',')];
     
     results.forEach(row => {
@@ -256,6 +264,8 @@ exports.exportShortExpiryReportsCSV = async (req, res) => {
         row.createdAt ? new Date(row.createdAt).toISOString() : '',
         `"${(row.outletName || '').replace(/"/g, '""')}"`,
         `"${(row.regionName || '').replace(/"/g, '""')}"`,
+        `"${(row.outletTypeName || '').replace(/"/g, '""')}"`,
+        `"${(row.outletAccountName || '').replace(/"/g, '""')}"`,
         `"${(row.salesRepName || '').replace(/"/g, '""')}"`
       ];
       csvRows.push(values.join(','));
