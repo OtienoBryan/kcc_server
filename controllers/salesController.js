@@ -119,18 +119,45 @@ exports.getAllSalesReps = async (req, res) => {
 exports.createSalesRep = async (req, res) => {
   const { name, email, phoneNumber, country, region, route, photo, role, expected_weekly_coverage } = req.body;
   try {
+    let region_id = null;
+    if (region && region !== '') {
+      try {
+        const [regionRows] = await db.query('SELECT id FROM Regions WHERE name = ?', [region]);
+        if (regionRows.length > 0) {
+          region_id = regionRows[0].id;
+        } else {
+          const [regionRowsLower] = await db.query('SELECT id FROM regions WHERE name = ?', [region]);
+          if (regionRowsLower.length > 0) region_id = regionRowsLower[0].id;
+        }
+      } catch (e) {
+        console.log('Error looking up region_id:', e.message);
+      }
+    }
+
+    let route_id_update = null;
+    if (route && route !== '') {
+      try {
+        const [routeRows] = await db.query('SELECT id FROM routes WHERE name = ?', [route]);
+        if (routeRows.length > 0) route_id_update = routeRows[0].id;
+      } catch (e) {
+        console.log('Error looking up route_id_update:', e.message);
+      }
+    }
+
     const [result] = await db.query(
-      'INSERT INTO SalesRep (name, email, phoneNumber, country, region, route_name_update, photoUrl, role, expected_weekly_coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, email, phoneNumber, country, region, route, photo, role || 'sales rep', expected_weekly_coverage || null]
+      'INSERT INTO SalesRep (name, email, phoneNumber, country, region, region_id, route_name_update, route_id_update, photoUrl, role, expected_weekly_coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, email, phoneNumber, country, region, region_id, route, route_id_update, photo, role || 'sales rep', expected_weekly_coverage || null]
     );
-    res.status(201).json({ 
-      id: result.insertId, 
-      name, 
-      email, 
-      phoneNumber, 
-      country, 
-      region, 
-      route, 
+    res.status(201).json({
+      id: result.insertId,
+      name,
+      email,
+      phoneNumber,
+      country,
+      region,
+      region_id,
+      route,
+      route_id_update,
       photo,
       role: role || 'sales rep',
       expected_weekly_coverage: expected_weekly_coverage || null
@@ -254,6 +281,23 @@ exports.updateSalesRepStatus = async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update sales rep status', details: err.message });
+  }
+};
+
+// Update device status of a sales rep (0 = unlocked, 1 = locked)
+exports.updateDeviceStatus = async (req, res) => {
+  const { id } = req.params;
+  const { device_status } = req.body;
+  if (device_status !== 0 && device_status !== 1) {
+    return res.status(400).json({ error: 'device_status must be 0 (unlocked) or 1 (locked)' });
+  }
+  try {
+    await db.query('UPDATE SalesRep SET device_status = ? WHERE id = ?', [device_status, id]);
+    const [rows] = await db.query('SELECT * FROM SalesRep WHERE id = ?', [id]);
+    if (rows.length === 0) return res.status(404).json({ error: 'Sales rep not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update device status', details: err.message });
   }
 };
 

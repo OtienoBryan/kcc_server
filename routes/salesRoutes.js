@@ -31,6 +31,9 @@ router.put('/sales-reps/:id', salesController.updateSalesRep);
 // Update status of a sales rep
 router.patch('/sales-reps/:id/status', salesController.updateSalesRepStatus);
 
+// Update device status of a sales rep (lock / unlock)
+router.patch('/sales-reps/:id/device-status', salesController.updateDeviceStatus);
+
 // Delete a sales rep
 router.delete('/sales-reps/:id', salesController.deleteSalesRep);
 
